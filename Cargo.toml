@@ -1,0 +1,13 @@
+[package]
+name = "p92000l"
+version = "0.1.0"
+authors = ["Andrew Chambers <ac@acha.ninja>"]
+edition = "2018"
+
+[dependencies]
+
+nix = "0.20"
+num-traits = "0.2"
+byteorder = "1.4"
+enum_primitive = "0.1"
+bitflags = "1.2"
