@@ -1,2 +1,4 @@
-/target
+target
 Cargo.lock
+examples/roexport/target
+examples/roexport/Cargo.lock

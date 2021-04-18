@@ -8,9 +8,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use enum_primitive::*;
 use num_traits::FromPrimitive;
 use std::fs;
-use std::io::{Read, Result};
-use std::mem;
-use std::mem::{size_of, size_of_val};
+use std::io::Read;
 use std::ops::{Shl, Shr};
 use std::os::unix::fs::MetadataExt;
 
@@ -124,15 +122,13 @@ pub mod p92000 {
     impl Stat {
         /// Get the current size of the stat
         pub fn size(&self) -> u16 {
-            use std::mem::{size_of, size_of_val};
-            (size_of_val(&self.typ)
-                + size_of_val(&self.dev)
-                + size_of_val(&self.qid)
-                + size_of_val(&self.mode)
-                + size_of_val(&self.atime)
-                + size_of_val(&self.mtime)
-                + size_of_val(&self.length)
-                + (size_of::<u16>() * 4)
+            (2 + 4
+                + 13
+                + 4
+                + 4
+                + 4
+                + 8
+                + (2 * 4)
                 + self.name.len()
                 + self.uid.len()
                 + self.gid.len()
@@ -437,11 +433,7 @@ pub struct DirEntry {
 
 impl DirEntry {
     pub fn size(&self) -> u32 {
-        (size_of_val(&self.qid)
-            + size_of_val(&self.offset)
-            + size_of_val(&self.typ)
-            + size_of::<u16>()
-            + self.name.len()) as u32
+        (13 + 8 + 1 + 2 + self.name.len()) as u32
     }
 }
 
@@ -604,108 +596,153 @@ impl MsgType {
 impl<'a> From<&'a Fcall> for MsgType {
     fn from(fcall: &'a Fcall) -> MsgType {
         match *fcall {
-            Fcall::Rlerror { .. } => MsgType::Rlerror,
-            Fcall::Tstatfs { .. } => MsgType::Tstatfs,
-            Fcall::Rstatfs { .. } => MsgType::Rstatfs,
-            Fcall::Tlopen { .. } => MsgType::Tlopen,
-            Fcall::Rlopen { .. } => MsgType::Rlopen,
-            Fcall::Tlcreate { .. } => MsgType::Tlcreate,
-            Fcall::Rlcreate { .. } => MsgType::Rlcreate,
-            Fcall::Tsymlink { .. } => MsgType::Tsymlink,
-            Fcall::Rsymlink { .. } => MsgType::Rsymlink,
-            Fcall::Tmknod { .. } => MsgType::Tmknod,
-            Fcall::Rmknod { .. } => MsgType::Rmknod,
-            Fcall::Trename { .. } => MsgType::Trename,
-            Fcall::Rrename => MsgType::Rrename,
-            Fcall::Treadlink { .. } => MsgType::Treadlink,
-            Fcall::Rreadlink { .. } => MsgType::Rreadlink,
-            Fcall::Tgetattr { .. } => MsgType::Tgetattr,
-            Fcall::Rgetattr { .. } => MsgType::Rgetattr,
-            Fcall::Tsetattr { .. } => MsgType::Tsetattr,
-            Fcall::Rsetattr => MsgType::Rsetattr,
-            Fcall::Txattrwalk { .. } => MsgType::Txattrwalk,
-            Fcall::Rxattrwalk { .. } => MsgType::Rxattrwalk,
-            Fcall::Txattrcreate { .. } => MsgType::Txattrcreate,
-            Fcall::Rxattrcreate => MsgType::Rxattrcreate,
-            Fcall::Treaddir { .. } => MsgType::Treaddir,
-            Fcall::Rreaddir { .. } => MsgType::Rreaddir,
-            Fcall::Tfsync { .. } => MsgType::Tfsync,
-            Fcall::Rfsync => MsgType::Rfsync,
-            Fcall::Tlock { .. } => MsgType::Tlock,
-            Fcall::Rlock { .. } => MsgType::Rlock,
-            Fcall::Tgetlock { .. } => MsgType::Tgetlock,
-            Fcall::Rgetlock { .. } => MsgType::Rgetlock,
-            Fcall::Tlink { .. } => MsgType::Tlink,
-            Fcall::Rlink => MsgType::Rlink,
-            Fcall::Tmkdir { .. } => MsgType::Tmkdir,
-            Fcall::Rmkdir { .. } => MsgType::Rmkdir,
-            Fcall::Trenameat { .. } => MsgType::Trenameat,
-            Fcall::Rrenameat => MsgType::Rrenameat,
-            Fcall::Tunlinkat { .. } => MsgType::Tunlinkat,
-            Fcall::Runlinkat => MsgType::Runlinkat,
-            Fcall::Tauth { .. } => MsgType::Tauth,
-            Fcall::Rauth { .. } => MsgType::Rauth,
-            Fcall::Tattach { .. } => MsgType::Tattach,
-            Fcall::Rattach { .. } => MsgType::Rattach,
-            Fcall::Tversion { .. } => MsgType::Tversion,
-            Fcall::Rversion { .. } => MsgType::Rversion,
-            Fcall::Tflush { .. } => MsgType::Tflush,
-            Fcall::Rflush => MsgType::Rflush,
-            Fcall::Twalk { .. } => MsgType::Twalk,
-            Fcall::Rwalk { .. } => MsgType::Rwalk,
-            Fcall::Tread { .. } => MsgType::Tread,
-            Fcall::Rread { .. } => MsgType::Rread,
-            Fcall::Twrite { .. } => MsgType::Twrite,
-            Fcall::Rwrite { .. } => MsgType::Rwrite,
-            Fcall::Tclunk { .. } => MsgType::Tclunk,
-            Fcall::Rclunk => MsgType::Rclunk,
-            Fcall::Tremove { .. } => MsgType::Tremove,
-            Fcall::Rremove => MsgType::Rremove,
+            Fcall::Rlerror(_) => MsgType::Rlerror,
+            Fcall::Tstatfs(_) => MsgType::Tstatfs,
+            Fcall::Rstatfs(_) => MsgType::Rstatfs,
+            Fcall::Tlopen(_) => MsgType::Tlopen,
+            Fcall::Rlopen(_) => MsgType::Rlopen,
+            Fcall::Tlcreate(_) => MsgType::Tlcreate,
+            Fcall::Rlcreate(_) => MsgType::Rlcreate,
+            Fcall::Tsymlink(_) => MsgType::Tsymlink,
+            Fcall::Rsymlink(_) => MsgType::Rsymlink,
+            Fcall::Tmknod(_) => MsgType::Tmknod,
+            Fcall::Rmknod(_) => MsgType::Rmknod,
+            Fcall::Trename(_) => MsgType::Trename,
+            Fcall::Rrename(_) => MsgType::Rrename,
+            Fcall::Treadlink(_) => MsgType::Treadlink,
+            Fcall::Rreadlink(_) => MsgType::Rreadlink,
+            Fcall::Tgetattr(_) => MsgType::Tgetattr,
+            Fcall::Rgetattr(_) => MsgType::Rgetattr,
+            Fcall::Tsetattr(_) => MsgType::Tsetattr,
+            Fcall::Rsetattr(_) => MsgType::Rsetattr,
+            Fcall::Txattrwalk(_) => MsgType::Txattrwalk,
+            Fcall::Rxattrwalk(_) => MsgType::Rxattrwalk,
+            Fcall::Txattrcreate(_) => MsgType::Txattrcreate,
+            Fcall::Rxattrcreate(_) => MsgType::Rxattrcreate,
+            Fcall::Treaddir(_) => MsgType::Treaddir,
+            Fcall::Rreaddir(_) => MsgType::Rreaddir,
+            Fcall::Tfsync(_) => MsgType::Tfsync,
+            Fcall::Rfsync(_) => MsgType::Rfsync,
+            Fcall::Tlock(_) => MsgType::Tlock,
+            Fcall::Rlock(_) => MsgType::Rlock,
+            Fcall::Tgetlock(_) => MsgType::Tgetlock,
+            Fcall::Rgetlock(_) => MsgType::Rgetlock,
+            Fcall::Tlink(_) => MsgType::Tlink,
+            Fcall::Rlink(_) => MsgType::Rlink,
+            Fcall::Tmkdir(_) => MsgType::Tmkdir,
+            Fcall::Rmkdir(_) => MsgType::Rmkdir,
+            Fcall::Trenameat(_) => MsgType::Trenameat,
+            Fcall::Rrenameat(_) => MsgType::Rrenameat,
+            Fcall::Tunlinkat(_) => MsgType::Tunlinkat,
+            Fcall::Runlinkat(_) => MsgType::Runlinkat,
+            Fcall::Tauth(_) => MsgType::Tauth,
+            Fcall::Rauth(_) => MsgType::Rauth,
+            Fcall::Tattach(_) => MsgType::Tattach,
+            Fcall::Rattach(_) => MsgType::Rattach,
+            Fcall::Tversion(_) => MsgType::Tversion,
+            Fcall::Rversion(_) => MsgType::Rversion,
+            Fcall::Tflush(_) => MsgType::Tflush,
+            Fcall::Rflush(_) => MsgType::Rflush,
+            Fcall::Twalk(_) => MsgType::Twalk,
+            Fcall::Rwalk(_) => MsgType::Rwalk,
+            Fcall::Tread(_) => MsgType::Tread,
+            Fcall::Rread(_) => MsgType::Rread,
+            Fcall::Twrite(_) => MsgType::Twrite,
+            Fcall::Rwrite(_) => MsgType::Rwrite,
+            Fcall::Tclunk(_) => MsgType::Tclunk,
+            Fcall::Rclunk(_) => MsgType::Rclunk,
+            Fcall::Tremove(_) => MsgType::Tremove,
+            Fcall::Rremove(_) => MsgType::Rremove,
         }
     }
 }
 
-/// A data type encapsulating the various 9P messages
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Fcall {
-    // 9P2000.L
+macro_rules! messages{
+    (
+    $(
+     $struct_name:ident {
+        $(
+        $field_name:ident : $field_type:ty
+        ),*$(,)*
+    })+
+    ) => {
+            $(
+            #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            pub struct $struct_name{
+                $(
+                pub $field_name : $field_type,
+                )*
+            }
+
+            impl From<$struct_name> for Fcall {
+                fn from(v: $struct_name) -> Fcall {
+                    Fcall::$struct_name(v)
+                }
+            }
+            )*
+    }
+}
+
+messages! {
+
     Rlerror {
         ecode: u32,
-    },
+    }
+
+    Tattach {
+        fid: u32,
+        afid: u32,
+        uname: String,
+        aname: String,
+        n_uname: u32,
+    }
+
+    Rattach {
+      qid: Qid,
+    }
+
     Tstatfs {
         fid: u32,
-    },
+    }
+
     Rstatfs {
         statfs: Statfs,
-    },
+    }
+
     Tlopen {
         fid: u32,
         flags: u32,
-    },
+    }
+
     Rlopen {
         qid: Qid,
         iounit: u32,
-    },
+    }
+
     Tlcreate {
         fid: u32,
         name: String,
         flags: u32,
         mode: u32,
         gid: u32,
-    },
+    }
+
     Rlcreate {
         qid: Qid,
         iounit: u32,
-    },
+    }
+
     Tsymlink {
         fid: u32,
         name: String,
         symtgt: String,
         gid: u32,
-    },
+    }
+
     Rsymlink {
         qid: Qid,
-    },
+    }
+
     Tmknod {
         dfid: u32,
         name: String,
@@ -713,188 +750,317 @@ pub enum Fcall {
         major: u32,
         minor: u32,
         gid: u32,
-    },
+    }
+
     Rmknod {
         qid: Qid,
-    },
+    }
+
     Trename {
         fid: u32,
         dfid: u32,
         name: String,
-    },
-    Rrename,
+    }
+
+    Rrename {}
+
     Treadlink {
         fid: u32,
-    },
+    }
+
     Rreadlink {
         target: String,
-    },
+    }
+
     Tgetattr {
         fid: u32,
         req_mask: GetattrMask,
-    },
-    /// Reserved members specified in the protocol are handled in Encodable/Decodable traits.
+    }
+
     Rgetattr {
         valid: GetattrMask,
         qid: Qid,
         stat: Stat,
-    },
+    }
+
     Tsetattr {
         fid: u32,
         valid: SetattrMask,
         stat: SetAttr,
-    },
-    Rsetattr,
+    }
+
+    Rsetattr {}
+
     Txattrwalk {
         fid: u32,
         newfid: u32,
         name: String,
-    },
+    }
+
     Rxattrwalk {
         size: u64,
-    },
+    }
+
     Txattrcreate {
         fid: u32,
         name: String,
         attr_size: u64,
         flags: u32,
-    },
-    Rxattrcreate,
+    }
+
+    Rxattrcreate {}
+
     Treaddir {
         fid: u32,
         offset: u64,
         count: u32,
-    },
+    }
+
     Rreaddir {
         data: DirEntryData,
-    },
+    }
+
     Tfsync {
         fid: u32,
-    },
-    Rfsync,
+    }
+
+    Rfsync {}
+
     Tlock {
         fid: u32,
         flock: Flock,
-    },
+    }
+
     Rlock {
         status: LockStatus,
-    },
+    }
+
     Tgetlock {
         fid: u32,
         flock: Getlock,
-    },
+    }
+
     Rgetlock {
         flock: Getlock,
-    },
+    }
+
     Tlink {
         dfid: u32,
         fid: u32,
         name: String,
-    },
-    Rlink,
+    }
+
+    Rlink {}
+
     Tmkdir {
         dfid: u32,
         name: String,
         mode: u32,
         gid: u32,
-    },
+    }
+
     Rmkdir {
         qid: Qid,
-    },
+    }
+
     Trenameat {
         olddirfid: u32,
         oldname: String,
         newdirfid: u32,
         newname: String,
-    },
-    Rrenameat,
+    }
+
+    Rrenameat {}
+
     Tunlinkat {
         dirfd: u32,
         name: String,
         flags: u32,
-    },
-    Runlinkat,
+    }
 
-    // 9P2000.u
+    Runlinkat {}
+
     Tauth {
         afid: u32,
         uname: String,
         aname: String,
         n_uname: u32,
-    },
+    }
+
     Rauth {
         aqid: Qid,
-    },
-    Tattach {
-        fid: u32,
-        afid: u32,
-        uname: String,
-        aname: String,
-        n_uname: u32,
-    },
-    Rattach {
-        qid: Qid,
-    },
+    }
 
-    // 9P2000
     Tversion {
         msize: u32,
         version: String,
-    },
+    }
+
     Rversion {
         msize: u32,
         version: String,
-    },
+    }
+
     Tflush {
         oldtag: u16,
-    },
-    Rflush,
+    }
+
+    Rflush {}
+
     Twalk {
         fid: u32,
         newfid: u32,
         wnames: Vec<String>,
-    },
+    }
+
     Rwalk {
         wqids: Vec<Qid>,
-    },
+    }
+
     Tread {
         fid: u32,
         offset: u64,
         count: u32,
-    },
+    }
+
     Rread {
         data: Data,
-    },
+    }
+
     Twrite {
         fid: u32,
         offset: u64,
         data: Data,
-    },
+    }
+
     Rwrite {
         count: u32,
-    },
+    }
+
     Tclunk {
         fid: u32,
-    },
-    Rclunk,
+    }
+
+    Rclunk {}
+
     Tremove {
         fid: u32,
-    },
-    Rremove,
+    }
+
+    Rremove {}
+}
+
+impl From<std::io::Error> for Rlerror {
+    fn from(err: std::io::Error) -> Self {
+        use super::errno::*;
+        use std::io::ErrorKind::*;
+
+        let ecode = match err.kind() {
+            NotFound => ENOENT,
+            PermissionDenied => EPERM,
+            ConnectionRefused => ECONNREFUSED,
+            ConnectionReset => ECONNRESET,
+            ConnectionAborted => ECONNABORTED,
+            NotConnected => ENOTCONN,
+            AddrInUse => EADDRINUSE,
+            AddrNotAvailable => EADDRNOTAVAIL,
+            BrokenPipe => EPIPE,
+            AlreadyExists => EALREADY,
+            WouldBlock => EAGAIN,
+            InvalidInput => EINVAL,
+            InvalidData => EINVAL,
+            TimedOut => ETIMEDOUT,
+            WriteZero => EAGAIN,
+            Interrupted => EINTR,
+            Other | _ => EIO,
+        };
+
+        Rlerror { ecode }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Fcall {
+    Rlerror(Rlerror),
+    Tstatfs(Tstatfs),
+    Rstatfs(Rstatfs),
+    Tlopen(Tlopen),
+    Rlopen(Rlopen),
+    Tlcreate(Tlcreate),
+    Rlcreate(Rlcreate),
+    Tsymlink(Tsymlink),
+    Rsymlink(Rsymlink),
+    Tmknod(Tmknod),
+    Rmknod(Rmknod),
+    Trename(Trename),
+    Rrename(Rrename),
+    Treadlink(Treadlink),
+    Rreadlink(Rreadlink),
+    Tgetattr(Tgetattr),
+    Rgetattr(Rgetattr),
+    Tsetattr(Tsetattr),
+    Rsetattr(Rsetattr),
+    Txattrwalk(Txattrwalk),
+    Rxattrwalk(Rxattrwalk),
+    Txattrcreate(Txattrcreate),
+    Rxattrcreate(Rxattrcreate),
+    Treaddir(Treaddir),
+    Rreaddir(Rreaddir),
+    Tfsync(Tfsync),
+    Rfsync(Rfsync),
+    Tlock(Tlock),
+    Rlock(Rlock),
+    Tgetlock(Tgetlock),
+    Rgetlock(Rgetlock),
+    Tlink(Tlink),
+    Rlink(Rlink),
+    Tmkdir(Tmkdir),
+    Rmkdir(Rmkdir),
+    Trenameat(Trenameat),
+    Rrenameat(Rrenameat),
+    Tunlinkat(Tunlinkat),
+    Runlinkat(Runlinkat),
+    Tauth(Tauth),
+    Rauth(Rauth),
+    Tattach(Tattach),
+    Rattach(Rattach),
+    Tversion(Tversion),
+    Rversion(Rversion),
+    Tflush(Tflush),
+    Rflush(Rflush),
+    Twalk(Twalk),
+    Rwalk(Rwalk),
+    Tread(Tread),
+    Rread(Rread),
+    Twrite(Twrite),
+    Rwrite(Rwrite),
+    Tclunk(Tclunk),
+    Rclunk(Rclunk),
+    Tremove(Tremove),
+    Rremove(Rremove),
     // 9P2000 operations not used for 9P2000.L
-    //Tauth { afid: u32, uname: String, aname: String },
-    //Rauth { aqid: Qid },
-    //Rerror { ename: String },
-    //Tattach { fid: u32, afid: u32, uname: String, aname: String },
-    //Rattach { qid: Qid },
-    //Topen { fid: u32, mode: u8 },
-    //Ropen { qid: Qid, iounit: u32 },
-    //Tcreate { fid: u32, name: String, perm: u32, mode: u8 },
-    //Rcreate { qid: Qid, iounit: u32 },
-    //Tstat { fid: u32 },
-    //Rstat { stat: Stat },
-    //Twstat { fid: u32, stat: Stat },
+    //Tauth,
+    //Rauth,
+    //Rerror,
+    //Tattach,
+    //Rattach,
+    //Topen,
+    //Ropen,
+    //Tcreate,
+    //Rcreate,
+    //Tstat,
+    //Rstat,
+    //Twstat,
     //Rwstat,
+}
+
+impl<A: Into<Fcall>, B: Into<Fcall>> From<Result<A, B>> for Fcall {
+    fn from(r: Result<A, B>) -> Fcall {
+        match r {
+            Ok(a) => a.into(),
+            Err(b) => b.into(),
+        }
+    }
 }
 
 /// Envelope for 9P messages
@@ -923,8 +1089,6 @@ macro_rules! decode {
     };
 }
 
-// Create an unintialized buffer
-// Safe to use only for writing data to it
 fn create_buffer(size: usize) -> Vec<u8> {
     let mut buffer = Vec::with_capacity(size);
     unsafe {
@@ -933,7 +1097,7 @@ fn create_buffer(size: usize) -> Vec<u8> {
     buffer
 }
 
-fn read_exact<R: Read + ?Sized>(r: &mut R, size: usize) -> Result<Vec<u8>> {
+fn read_exact<R: Read + ?Sized>(r: &mut R, size: usize) -> std::io::Result<Vec<u8>> {
     let mut buf = create_buffer(size);
     r.read_exact(&mut buf[..]).and(Ok(buf))
 }
@@ -966,7 +1130,7 @@ impl<W: WriteBytesExt> Encoder<W> {
     }
 
     /// Encode data, equivalent to: decoder << data
-    pub fn encode<T: Encodable>(&mut self, data: &T) -> Result<usize> {
+    pub fn encode<T: Encodable>(&mut self, data: &T) -> std::io::Result<usize> {
         let bytes = data.encode(&mut self.writer)?;
         self.bytes += bytes;
         Ok(bytes)
@@ -1012,7 +1176,7 @@ impl<R: ReadBytesExt> Decoder<R> {
     pub fn new(reader: R) -> Decoder<R> {
         Decoder { reader }
     }
-    pub fn decode<T: Decodable>(&mut self) -> Result<T> {
+    pub fn decode<T: Decodable>(&mut self) -> std::io::Result<T> {
         Decodable::decode(&mut self.reader)
     }
     /// Get inner reader
@@ -1053,38 +1217,38 @@ impl<'a, T: Decodable, R: ReadBytesExt> Shr<&'a mut T> for SResult<Decoder<R>> {
 /// Trait representing a type which can be serialized into binary
 pub trait Encodable {
     /// Encode self to w and returns the number of bytes encoded
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize>;
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize>;
 }
 
 impl Encodable for u8 {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
-        w.write_u8(*self).and(Ok(mem::size_of::<Self>()))
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
+        w.write_u8(*self).and(Ok(1))
     }
 }
 
 impl Encodable for u16 {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         w.write_u16::<LittleEndian>(*self)
-            .and(Ok(mem::size_of::<Self>()))
+            .and(Ok(2))
     }
 }
 
 impl Encodable for u32 {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         w.write_u32::<LittleEndian>(*self)
-            .and(Ok(mem::size_of::<Self>()))
+            .and(Ok(4))
     }
 }
 
 impl Encodable for u64 {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         w.write_u64::<LittleEndian>(*self)
-            .and(Ok(mem::size_of::<Self>()))
+            .and(Ok(8))
     }
 }
 
 impl Encodable for String {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         let mut bytes = (self.len() as u16).encode(w)?;
         bytes += w.write_all(self.as_bytes()).and(Ok(self.len()))?;
         Ok(bytes)
@@ -1092,7 +1256,7 @@ impl Encodable for String {
 }
 
 impl Encodable for Qid {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         match Encoder::new(w) << &self.typ.bits() << &self.version << &self.path {
             SResult(Ok(enc)) => Ok(enc.bytes_written()),
             SResult(Err(e)) => Err(e),
@@ -1101,7 +1265,7 @@ impl Encodable for Qid {
 }
 
 impl Encodable for Statfs {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         match Encoder::new(w)
             << &self.typ
             << &self.bsize
@@ -1120,7 +1284,7 @@ impl Encodable for Statfs {
 }
 
 impl Encodable for Time {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         match Encoder::new(w) << &self.sec << &self.nsec {
             SResult(Ok(enc)) => Ok(enc.bytes_written()),
             SResult(Err(e)) => Err(e),
@@ -1129,7 +1293,7 @@ impl Encodable for Time {
 }
 
 impl Encodable for Stat {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         match Encoder::new(w)
             << &self.mode
             << &self.uid
@@ -1150,7 +1314,7 @@ impl Encodable for Stat {
 }
 
 impl Encodable for SetAttr {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         match Encoder::new(w)
             << &self.mode
             << &self.uid
@@ -1166,7 +1330,7 @@ impl Encodable for SetAttr {
 }
 
 impl Encodable for DirEntry {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         match Encoder::new(w) << &self.qid << &self.offset << &self.typ << &self.name {
             SResult(Ok(enc)) => Ok(enc.bytes_written()),
             SResult(Err(e)) => Err(e),
@@ -1175,7 +1339,7 @@ impl Encodable for DirEntry {
 }
 
 impl Encodable for DirEntryData {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         match self
             .data()
             .iter()
@@ -1188,7 +1352,7 @@ impl Encodable for DirEntryData {
 }
 
 impl Encodable for Data {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         let size = self.0.len();
         let bytes = (size as u32).encode(w)? + size;
         w.write_all(&self.0)?;
@@ -1197,7 +1361,7 @@ impl Encodable for Data {
 }
 
 impl Encodable for Flock {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         match Encoder::new(w)
             << &self.typ.bits()
             << &self.flags.bits()
@@ -1213,7 +1377,7 @@ impl Encodable for Flock {
 }
 
 impl Encodable for Getlock {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         match Encoder::new(w)
             << &self.typ.bits()
             << &self.start
@@ -1228,7 +1392,7 @@ impl Encodable for Getlock {
 }
 
 impl<T: Encodable> Encodable for Vec<T> {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         match self
             .iter()
             .fold(Encoder::new(w) << &(self.len() as u16), |acc, s| acc << s)
@@ -1240,178 +1404,167 @@ impl<T: Encodable> Encodable for Vec<T> {
 }
 
 impl Encodable for Msg {
-    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> Result<usize> {
-        use Fcall::*;
-
+    fn encode<W: WriteBytesExt>(&self, w: &mut W) -> std::io::Result<usize> {
         let typ = MsgType::from(&self.body);
         let buf = Encoder::new(w) << &(typ as u8) << &self.tag;
 
         let buf = match self.body {
-            // 9P2000.L
-            Rlerror { ref ecode } => buf << ecode,
-            Tstatfs { ref fid } => buf << fid,
-            Rstatfs { ref statfs } => buf << statfs,
-            Tlopen { ref fid, ref flags } => buf << fid << flags,
-            Rlopen {
+            Fcall::Rlerror(Rlerror { ref ecode }) => buf << ecode,
+            Fcall::Tstatfs(Tstatfs { ref fid }) => buf << fid,
+            Fcall::Rstatfs(Rstatfs { ref statfs }) => buf << statfs,
+            Fcall::Tlopen(Tlopen { ref fid, ref flags }) => buf << fid << flags,
+            Fcall::Rlopen(Rlopen {
                 ref qid,
                 ref iounit,
-            } => buf << qid << iounit,
-            Tlcreate {
+            }) => buf << qid << iounit,
+            Fcall::Tlcreate(Tlcreate {
                 ref fid,
                 ref name,
                 ref flags,
                 ref mode,
                 ref gid,
-            } => buf << fid << name << flags << mode << gid,
-            Rlcreate {
+            }) => buf << fid << name << flags << mode << gid,
+            Fcall::Rlcreate(Rlcreate {
                 ref qid,
                 ref iounit,
-            } => buf << qid << iounit,
-            Tsymlink {
+            }) => buf << qid << iounit,
+            Fcall::Tsymlink(Tsymlink {
                 ref fid,
                 ref name,
                 ref symtgt,
                 ref gid,
-            } => buf << fid << name << symtgt << gid,
-            Rsymlink { ref qid } => buf << qid,
-            Tmknod {
+            }) => buf << fid << name << symtgt << gid,
+            Fcall::Rsymlink(Rsymlink { ref qid }) => buf << qid,
+            Fcall::Tmknod(Tmknod {
                 ref dfid,
                 ref name,
                 ref mode,
                 ref major,
                 ref minor,
                 ref gid,
-            } => buf << dfid << name << mode << major << minor << gid,
-            Rmknod { ref qid } => buf << qid,
-            Trename {
+            }) => buf << dfid << name << mode << major << minor << gid,
+            Fcall::Rmknod(Rmknod { ref qid }) => buf << qid,
+            Fcall::Trename(Trename {
                 ref fid,
                 ref dfid,
                 ref name,
-            } => buf << fid << dfid << name,
-            Rrename => buf,
-            Treadlink { ref fid } => buf << fid,
-            Rreadlink { ref target } => buf << target,
-            Tgetattr {
+            }) => buf << fid << dfid << name,
+            Fcall::Rrename(Rrename {}) => buf,
+            Fcall::Treadlink(Treadlink { ref fid }) => buf << fid,
+            Fcall::Rreadlink(Rreadlink { ref target }) => buf << target,
+            Fcall::Tgetattr(Tgetattr {
                 ref fid,
                 ref req_mask,
-            } => buf << fid << &req_mask.bits(),
-            Rgetattr {
+            }) => buf << fid << &req_mask.bits(),
+            Fcall::Rgetattr(Rgetattr {
                 ref valid,
                 ref qid,
                 ref stat,
-            } => buf << &valid.bits() << qid << stat << &0u64 << &0u64 << &0u64 << &0u64,
-            Tsetattr {
+            }) => buf << &valid.bits() << qid << stat << &0u64 << &0u64 << &0u64 << &0u64,
+            Fcall::Tsetattr(Tsetattr {
                 ref fid,
                 ref valid,
                 ref stat,
-            } => buf << fid << &valid.bits() << stat,
-            Rsetattr => buf,
-            Txattrwalk {
+            }) => buf << fid << &valid.bits() << stat,
+            Fcall::Rsetattr(Rsetattr {}) => buf,
+            Fcall::Txattrwalk(Txattrwalk {
                 ref fid,
                 ref newfid,
                 ref name,
-            } => buf << fid << newfid << name,
-            Rxattrwalk { ref size } => buf << size,
-            Txattrcreate {
+            }) => buf << fid << newfid << name,
+            Fcall::Rxattrwalk(Rxattrwalk { ref size }) => buf << size,
+            Fcall::Txattrcreate(Txattrcreate {
                 ref fid,
                 ref name,
                 ref attr_size,
                 ref flags,
-            } => buf << fid << name << attr_size << flags,
-            Rxattrcreate => buf,
-            Treaddir {
+            }) => buf << fid << name << attr_size << flags,
+            Fcall::Rxattrcreate(Rxattrcreate {}) => buf,
+            Fcall::Treaddir(Treaddir {
                 ref fid,
                 ref offset,
                 ref count,
-            } => buf << fid << offset << count,
-            Rreaddir { ref data } => buf << data,
-            Tfsync { ref fid } => buf << fid,
-            Rfsync => buf,
-            Tlock { ref fid, ref flock } => buf << fid << flock,
-            Rlock { ref status } => buf << &status.bits(),
-            Tgetlock { ref fid, ref flock } => buf << fid << flock,
-            Rgetlock { ref flock } => buf << flock,
-            Tlink {
+            }) => buf << fid << offset << count,
+            Fcall::Rreaddir(Rreaddir { ref data }) => buf << data,
+            Fcall::Tfsync(Tfsync { ref fid }) => buf << fid,
+            Fcall::Rfsync(Rfsync {}) => buf,
+            Fcall::Tlock(Tlock { ref fid, ref flock }) => buf << fid << flock,
+            Fcall::Rlock(Rlock { ref status }) => buf << &status.bits(),
+            Fcall::Tgetlock(Tgetlock { ref fid, ref flock }) => buf << fid << flock,
+            Fcall::Rgetlock(Rgetlock { ref flock }) => buf << flock,
+            Fcall::Tlink(Tlink {
                 ref dfid,
                 ref fid,
                 ref name,
-            } => buf << dfid << fid << name,
-            Rlink => buf,
-            Tmkdir {
+            }) => buf << dfid << fid << name,
+            Fcall::Rlink(Rlink {}) => buf,
+            Fcall::Tmkdir(Tmkdir {
                 ref dfid,
                 ref name,
                 ref mode,
                 ref gid,
-            } => buf << dfid << name << mode << gid,
-            Rmkdir { ref qid } => buf << qid,
-            Trenameat {
+            }) => buf << dfid << name << mode << gid,
+            Fcall::Rmkdir(Rmkdir { ref qid }) => buf << qid,
+            Fcall::Trenameat(Trenameat {
                 ref olddirfid,
                 ref oldname,
                 ref newdirfid,
                 ref newname,
-            } => buf << olddirfid << oldname << newdirfid << newname,
-            Rrenameat => buf,
-            Tunlinkat {
+            }) => buf << olddirfid << oldname << newdirfid << newname,
+            Fcall::Rrenameat(Rrenameat {}) => buf,
+            Fcall::Tunlinkat(Tunlinkat {
                 ref dirfd,
                 ref name,
                 ref flags,
-            } => buf << dirfd << name << flags,
-            Runlinkat => buf,
-
-            /*
-             * 9P2000.u
-             */
-            Tauth {
+            }) => buf << dirfd << name << flags,
+            Fcall::Runlinkat(Runlinkat {}) => buf,
+            Fcall::Tauth(Tauth {
                 ref afid,
                 ref uname,
                 ref aname,
                 ref n_uname,
-            } => buf << afid << uname << aname << n_uname,
-            Rauth { ref aqid } => buf << aqid,
-            Tattach {
+            }) => buf << afid << uname << aname << n_uname,
+            Fcall::Rauth(Rauth { ref aqid }) => buf << aqid,
+            Fcall::Tattach(Tattach {
                 ref fid,
                 ref afid,
                 ref uname,
                 ref aname,
                 ref n_uname,
-            } => buf << fid << afid << uname << aname << n_uname,
-            Rattach { ref qid } => buf << qid,
-
-            /*
-             * 9P2000
-             */
-            Tversion {
+            }) => buf << fid << afid << uname << aname << n_uname,
+            Fcall::Rattach(Rattach { ref qid }) => buf << qid,
+            Fcall::Tversion(Tversion {
                 ref msize,
                 ref version,
-            } => buf << msize << version,
-            Rversion {
+            }) => buf << msize << version,
+            Fcall::Rversion(Rversion {
                 ref msize,
                 ref version,
-            } => buf << msize << version,
-            Tflush { ref oldtag } => buf << oldtag,
-            Rflush => buf,
-            Twalk {
+            }) => buf << msize << version,
+            Fcall::Tflush(Tflush { ref oldtag }) => buf << oldtag,
+            Fcall::Rflush(Rflush {}) => buf,
+            Fcall::Twalk(Twalk {
                 ref fid,
                 ref newfid,
                 ref wnames,
-            } => buf << fid << newfid << wnames,
-            Rwalk { ref wqids } => buf << wqids,
-            Tread {
+            }) => buf << fid << newfid << wnames,
+            Fcall::Rwalk(Rwalk { ref wqids }) => buf << wqids,
+            Fcall::Tread(Tread {
                 ref fid,
                 ref offset,
                 ref count,
-            } => buf << fid << offset << count,
-            Rread { ref data } => buf << data,
-            Twrite {
+            }) => buf << fid << offset << count,
+            Fcall::Rread(Rread { ref data }) => buf << data,
+            Fcall::Twrite(Twrite {
                 ref fid,
                 ref offset,
                 ref data,
-            } => buf << fid << offset << data,
-            Rwrite { ref count } => buf << count,
-            Tclunk { ref fid } => buf << fid,
-            Rclunk => buf,
-            Tremove { ref fid } => buf << fid,
-            Rremove => buf,
+            }) => buf << fid << offset << data,
+            Fcall::Rwrite(Rwrite { ref count }) => buf << count,
+            Fcall::Tclunk(Tclunk { ref fid }) => buf << fid,
+            Fcall::Rclunk(Rclunk {}) => buf,
+            Fcall::Tremove(Tremove { ref fid }) => buf << fid,
+            Fcall::Rremove(Rremove {}) => buf,
         };
 
         match buf {
@@ -1421,37 +1574,36 @@ impl Encodable for Msg {
     }
 }
 
-/// Trait representing a type which can be deserialized from binary
 pub trait Decodable: Sized {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self>;
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self>;
 }
 
 impl Decodable for u8 {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         r.read_u8()
     }
 }
 
 impl Decodable for u16 {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         r.read_u16::<LittleEndian>()
     }
 }
 
 impl Decodable for u32 {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         r.read_u32::<LittleEndian>()
     }
 }
 
 impl Decodable for u64 {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         r.read_u64::<LittleEndian>()
     }
 }
 
 impl Decodable for String {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         let len: u16 = Decodable::decode(r)?;
         String::from_utf8(read_exact(r, len as usize)?)
             .or(Err(io_err!(Other, "Invalid UTF-8 sequence")))
@@ -1459,7 +1611,7 @@ impl Decodable for String {
 }
 
 impl Decodable for Qid {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         Ok(Qid {
             typ: decode!(QidType, *r),
             version: Decodable::decode(r)?,
@@ -1469,7 +1621,7 @@ impl Decodable for Qid {
 }
 
 impl Decodable for Statfs {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         Ok(Statfs {
             typ: Decodable::decode(r)?,
             bsize: Decodable::decode(r)?,
@@ -1485,7 +1637,7 @@ impl Decodable for Statfs {
 }
 
 impl Decodable for Time {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         Ok(Time {
             sec: Decodable::decode(r)?,
             nsec: Decodable::decode(r)?,
@@ -1494,7 +1646,7 @@ impl Decodable for Time {
 }
 
 impl Decodable for Stat {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         Ok(Stat {
             mode: Decodable::decode(r)?,
             uid: Decodable::decode(r)?,
@@ -1512,7 +1664,7 @@ impl Decodable for Stat {
 }
 
 impl Decodable for SetAttr {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         Ok(SetAttr {
             mode: Decodable::decode(r)?,
             uid: Decodable::decode(r)?,
@@ -1525,7 +1677,7 @@ impl Decodable for SetAttr {
 }
 
 impl Decodable for DirEntry {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         Ok(DirEntry {
             qid: Decodable::decode(r)?,
             offset: Decodable::decode(r)?,
@@ -1536,7 +1688,7 @@ impl Decodable for DirEntry {
 }
 
 impl Decodable for DirEntryData {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         let count: u32 = Decodable::decode(r)?;
         let mut data: Vec<DirEntry> = Vec::with_capacity(count as usize);
         for _ in 0..count {
@@ -1547,14 +1699,14 @@ impl Decodable for DirEntryData {
 }
 
 impl Decodable for Data {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         let len: u32 = Decodable::decode(r)?;
         Ok(Data(read_exact(r, len as usize)?))
     }
 }
 
 impl Decodable for Flock {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         Ok(Flock {
             typ: decode!(LockType, *r),
             flags: decode!(LockFlag, *r),
@@ -1567,7 +1719,7 @@ impl Decodable for Flock {
 }
 
 impl Decodable for Getlock {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         Ok(Getlock {
             typ: decode!(LockType, *r),
             start: Decodable::decode(r)?,
@@ -1579,7 +1731,7 @@ impl Decodable for Getlock {
 }
 
 impl<T: Decodable> Decodable for Vec<T> {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         let len: u16 = Decodable::decode(r)?;
         let mut buf = Vec::new();
         for _ in 0..len {
@@ -1590,201 +1742,199 @@ impl<T: Decodable> Decodable for Vec<T> {
 }
 
 impl Decodable for Msg {
-    fn decode<R: ReadBytesExt>(r: &mut R) -> Result<Self> {
-        use MsgType::*;
-
+    fn decode<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Self> {
         let mut buf = r;
 
         let msg_type = MsgType::from_u8(decode!(buf));
         let tag = decode!(buf);
         let body = match msg_type {
-            Some(Rlerror) => Fcall::Rlerror {
+            Some(MsgType::Rlerror) => Fcall::Rlerror(Rlerror {
                 ecode: decode!(buf),
-            },
-            Some(Tstatfs) => Fcall::Tstatfs { fid: decode!(buf) },
-            Some(Rstatfs) => Fcall::Rstatfs {
+            }),
+            Some(MsgType::Tstatfs) => Fcall::Tstatfs(Tstatfs { fid: decode!(buf) }),
+            Some(MsgType::Rstatfs) => Fcall::Rstatfs(Rstatfs {
                 statfs: decode!(buf),
-            },
-            Some(Tlopen) => Fcall::Tlopen {
+            }),
+            Some(MsgType::Tlopen) => Fcall::Tlopen(Tlopen {
                 fid: decode!(buf),
                 flags: decode!(buf),
-            },
-            Some(Rlopen) => Fcall::Rlopen {
+            }),
+            Some(MsgType::Rlopen) => Fcall::Rlopen(Rlopen {
                 qid: decode!(buf),
                 iounit: decode!(buf),
-            },
-            Some(Tlcreate) => Fcall::Tlcreate {
+            }),
+            Some(MsgType::Tlcreate) => Fcall::Tlcreate(Tlcreate {
                 fid: decode!(buf),
                 name: decode!(buf),
                 flags: decode!(buf),
                 mode: decode!(buf),
                 gid: decode!(buf),
-            },
-            Some(Rlcreate) => Fcall::Rlcreate {
+            }),
+            Some(MsgType::Rlcreate) => Fcall::Rlcreate(Rlcreate {
                 qid: decode!(buf),
                 iounit: decode!(buf),
-            },
-            Some(Tsymlink) => Fcall::Tsymlink {
+            }),
+            Some(MsgType::Tsymlink) => Fcall::Tsymlink(Tsymlink {
                 fid: decode!(buf),
                 name: decode!(buf),
                 symtgt: decode!(buf),
                 gid: decode!(buf),
-            },
-            Some(Rsymlink) => Fcall::Rsymlink { qid: decode!(buf) },
-            Some(Tmknod) => Fcall::Tmknod {
+            }),
+            Some(MsgType::Rsymlink) => Fcall::Rsymlink(Rsymlink { qid: decode!(buf) }),
+            Some(MsgType::Tmknod) => Fcall::Tmknod(Tmknod {
                 dfid: decode!(buf),
                 name: decode!(buf),
                 mode: decode!(buf),
                 major: decode!(buf),
                 minor: decode!(buf),
                 gid: decode!(buf),
-            },
-            Some(Rmknod) => Fcall::Rmknod { qid: decode!(buf) },
-            Some(Trename) => Fcall::Trename {
+            }),
+            Some(MsgType::Rmknod) => Fcall::Rmknod(Rmknod { qid: decode!(buf) }),
+            Some(MsgType::Trename) => Fcall::Trename(Trename {
                 fid: decode!(buf),
                 dfid: decode!(buf),
                 name: decode!(buf),
-            },
-            Some(Rrename) => Fcall::Rrename,
-            Some(Treadlink) => Fcall::Treadlink { fid: decode!(buf) },
-            Some(Rreadlink) => Fcall::Rreadlink {
+            }),
+            Some(MsgType::Rrename) => Fcall::Rrename(Rrename {}),
+            Some(MsgType::Treadlink) => Fcall::Treadlink(Treadlink { fid: decode!(buf) }),
+            Some(MsgType::Rreadlink) => Fcall::Rreadlink(Rreadlink {
                 target: decode!(buf),
-            },
-            Some(Tgetattr) => Fcall::Tgetattr {
+            }),
+            Some(MsgType::Tgetattr) => Fcall::Tgetattr(Tgetattr {
                 fid: decode!(buf),
                 req_mask: decode!(GetattrMask, buf),
-            },
-            Some(Rgetattr) => {
-                let r = Fcall::Rgetattr {
+            }),
+            Some(MsgType::Rgetattr) => {
+                let r = Fcall::Rgetattr(Rgetattr {
                     valid: decode!(GetattrMask, buf),
                     qid: decode!(buf),
                     stat: decode!(buf),
-                };
+                });
                 let (_btime, _gen, _ver): (Time, u64, u64) =
                     (decode!(buf), decode!(buf), decode!(buf));
                 r
             }
-            Some(Tsetattr) => Fcall::Tsetattr {
+            Some(MsgType::Tsetattr) => Fcall::Tsetattr(Tsetattr {
                 fid: decode!(buf),
                 valid: decode!(SetattrMask, buf),
                 stat: decode!(buf),
-            },
-            Some(Rsetattr) => Fcall::Rsetattr,
-            Some(Txattrwalk) => Fcall::Txattrwalk {
+            }),
+            Some(MsgType::Rsetattr) => Fcall::Rsetattr(Rsetattr {}),
+            Some(MsgType::Txattrwalk) => Fcall::Txattrwalk(Txattrwalk {
                 fid: decode!(buf),
                 newfid: decode!(buf),
                 name: decode!(buf),
-            },
-            Some(Rxattrwalk) => Fcall::Rxattrwalk { size: decode!(buf) },
-            Some(Txattrcreate) => Fcall::Txattrcreate {
+            }),
+            Some(MsgType::Rxattrwalk) => Fcall::Rxattrwalk(Rxattrwalk { size: decode!(buf) }),
+            Some(MsgType::Txattrcreate) => Fcall::Txattrcreate(Txattrcreate {
                 fid: decode!(buf),
                 name: decode!(buf),
                 attr_size: decode!(buf),
                 flags: decode!(buf),
-            },
-            Some(Rxattrcreate) => Fcall::Rxattrcreate,
-            Some(Treaddir) => Fcall::Treaddir {
+            }),
+            Some(MsgType::Rxattrcreate) => Fcall::Rxattrcreate(Rxattrcreate {}),
+            Some(MsgType::Treaddir) => Fcall::Treaddir(Treaddir {
                 fid: decode!(buf),
                 offset: decode!(buf),
                 count: decode!(buf),
-            },
-            Some(Rreaddir) => Fcall::Rreaddir { data: decode!(buf) },
-            Some(Tfsync) => Fcall::Tfsync { fid: decode!(buf) },
-            Some(Rfsync) => Fcall::Rfsync,
-            Some(Tlock) => Fcall::Tlock {
+            }),
+            Some(MsgType::Rreaddir) => Fcall::Rreaddir(Rreaddir { data: decode!(buf) }),
+            Some(MsgType::Tfsync) => Fcall::Tfsync(Tfsync { fid: decode!(buf) }),
+            Some(MsgType::Rfsync) => Fcall::Rfsync(Rfsync {}),
+            Some(MsgType::Tlock) => Fcall::Tlock(Tlock {
                 fid: decode!(buf),
                 flock: decode!(buf),
-            },
-            Some(Rlock) => Fcall::Rlock {
+            }),
+            Some(MsgType::Rlock) => Fcall::Rlock(Rlock {
                 status: decode!(LockStatus, buf),
-            },
-            Some(Tgetlock) => Fcall::Tgetlock {
+            }),
+            Some(MsgType::Tgetlock) => Fcall::Tgetlock(Tgetlock {
                 fid: decode!(buf),
                 flock: decode!(buf),
-            },
-            Some(Rgetlock) => Fcall::Rgetlock {
+            }),
+            Some(MsgType::Rgetlock) => Fcall::Rgetlock(Rgetlock {
                 flock: decode!(buf),
-            },
-            Some(Tlink) => Fcall::Tlink {
+            }),
+            Some(MsgType::Tlink) => Fcall::Tlink(Tlink {
                 dfid: decode!(buf),
                 fid: decode!(buf),
                 name: decode!(buf),
-            },
-            Some(Rlink) => Fcall::Rlink,
-            Some(Tmkdir) => Fcall::Tmkdir {
+            }),
+            Some(MsgType::Rlink) => Fcall::Rlink(Rlink {}),
+            Some(MsgType::Tmkdir) => Fcall::Tmkdir(Tmkdir {
                 dfid: decode!(buf),
                 name: decode!(buf),
                 mode: decode!(buf),
                 gid: decode!(buf),
-            },
-            Some(Rmkdir) => Fcall::Rmkdir { qid: decode!(buf) },
-            Some(Trenameat) => Fcall::Trenameat {
+            }),
+            Some(MsgType::Rmkdir) => Fcall::Rmkdir(Rmkdir { qid: decode!(buf) }),
+            Some(MsgType::Trenameat) => Fcall::Trenameat(Trenameat {
                 olddirfid: decode!(buf),
                 oldname: decode!(buf),
                 newdirfid: decode!(buf),
                 newname: decode!(buf),
-            },
-            Some(Rrenameat) => Fcall::Rrenameat,
-            Some(Tunlinkat) => Fcall::Tunlinkat {
+            }),
+            Some(MsgType::Rrenameat) => Fcall::Rrenameat(Rrenameat {}),
+            Some(MsgType::Tunlinkat) => Fcall::Tunlinkat(Tunlinkat {
                 dirfd: decode!(buf),
                 name: decode!(buf),
                 flags: decode!(buf),
-            },
-            Some(Runlinkat) => Fcall::Runlinkat,
-            Some(Tauth) => Fcall::Tauth {
+            }),
+            Some(MsgType::Runlinkat) => Fcall::Runlinkat(Runlinkat {}),
+            Some(MsgType::Tauth) => Fcall::Tauth(Tauth {
                 afid: decode!(buf),
                 uname: decode!(buf),
                 aname: decode!(buf),
                 n_uname: decode!(buf),
-            },
-            Some(Rauth) => Fcall::Rauth { aqid: decode!(buf) },
-            Some(Tattach) => Fcall::Tattach {
+            }),
+            Some(MsgType::Rauth) => Fcall::Rauth(Rauth { aqid: decode!(buf) }),
+            Some(MsgType::Tattach) => Fcall::Tattach(Tattach {
                 fid: decode!(buf),
                 afid: decode!(buf),
                 uname: decode!(buf),
                 aname: decode!(buf),
                 n_uname: decode!(buf),
-            },
-            Some(Rattach) => Fcall::Rattach { qid: decode!(buf) },
-            Some(Tversion) => Fcall::Tversion {
+            }),
+            Some(MsgType::Rattach) => Fcall::Rattach(Rattach { qid: decode!(buf) }),
+            Some(MsgType::Tversion) => Fcall::Tversion(Tversion {
                 msize: decode!(buf),
                 version: decode!(buf),
-            },
-            Some(Rversion) => Fcall::Rversion {
+            }),
+            Some(MsgType::Rversion) => Fcall::Rversion(Rversion {
                 msize: decode!(buf),
                 version: decode!(buf),
-            },
-            Some(Tflush) => Fcall::Tflush {
+            }),
+            Some(MsgType::Tflush) => Fcall::Tflush(Tflush {
                 oldtag: decode!(buf),
-            },
-            Some(Rflush) => Fcall::Rflush,
-            Some(Twalk) => Fcall::Twalk {
+            }),
+            Some(MsgType::Rflush) => Fcall::Rflush(Rflush {}),
+            Some(MsgType::Twalk) => Fcall::Twalk(Twalk {
                 fid: decode!(buf),
                 newfid: decode!(buf),
                 wnames: decode!(buf),
-            },
-            Some(Rwalk) => Fcall::Rwalk {
+            }),
+            Some(MsgType::Rwalk) => Fcall::Rwalk(Rwalk {
                 wqids: decode!(buf),
-            },
-            Some(Tread) => Fcall::Tread {
+            }),
+            Some(MsgType::Tread) => Fcall::Tread(Tread {
                 fid: decode!(buf),
                 offset: decode!(buf),
                 count: decode!(buf),
-            },
-            Some(Rread) => Fcall::Rread { data: decode!(buf) },
-            Some(Twrite) => Fcall::Twrite {
+            }),
+            Some(MsgType::Rread) => Fcall::Rread(Rread { data: decode!(buf) }),
+            Some(MsgType::Twrite) => Fcall::Twrite(Twrite {
                 fid: decode!(buf),
                 offset: decode!(buf),
                 data: decode!(buf),
-            },
-            Some(Rwrite) => Fcall::Rwrite {
+            }),
+            Some(MsgType::Rwrite) => Fcall::Rwrite(Rwrite {
                 count: decode!(buf),
-            },
-            Some(Tclunk) => Fcall::Tclunk { fid: decode!(buf) },
-            Some(Rclunk) => Fcall::Rclunk,
-            Some(Tremove) => Fcall::Tremove { fid: decode!(buf) },
-            Some(Rremove) => Fcall::Rremove,
-            Some(Tlerror) | None => return Err(io_err!(Other, "Invalid message type")),
+            }),
+            Some(MsgType::Tclunk) => Fcall::Tclunk(Tclunk { fid: decode!(buf) }),
+            Some(MsgType::Rclunk) => Fcall::Rclunk(Rclunk {}),
+            Some(MsgType::Tremove) => Fcall::Tremove(Tremove { fid: decode!(buf) }),
+            Some(MsgType::Rremove) => Fcall::Rremove(Rremove {}),
+            Some(MsgType::Tlerror) | None => return Err(io_err!(Other, "Invalid message type")),
         };
 
         Ok(Msg { tag, body })
@@ -1792,11 +1942,11 @@ impl Decodable for Msg {
 }
 
 /// Helper function to read a 9P message from a byte-oriented stream
-pub fn read_msg<R: ReadBytesExt>(r: &mut R) -> Result<Msg> {
+pub fn read_msg<R: ReadBytesExt>(r: &mut R) -> std::io::Result<Msg> {
     Decodable::decode(r)
 }
 
 /// Helper function to write a 9P message into a byte-oriented stream
-pub fn write_msg<W: WriteBytesExt>(w: &mut W, msg: &Msg) -> Result<usize> {
+pub fn write_msg<W: WriteBytesExt>(w: &mut W, msg: &Msg) -> std::io::Result<usize> {
     msg.encode(w)
 }
