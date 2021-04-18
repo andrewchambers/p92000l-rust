@@ -265,7 +265,13 @@ where
                 ref offset,
                 ref data,
             } => get_fid!(fid, fs.rwrite(fid, *offset, data)),
-            Fcall::Tclunk { fid } => get_fid!(fid, fs.rclunk(fid)),
+            Fcall::Tclunk { fid } => {
+              let r = get_fid!(fid, fs.rclunk(fid));
+              if let Fcall::Rclunk = r {
+                    fids.remove(&fid);
+              }
+              r
+            },
             Fcall::Tremove { fid } => get_fid!(fid, fs.rremove(fid)),
             Fcall::Trename {
                 fid,
@@ -325,10 +331,6 @@ where
             } => new_fid!(newfid, get_fid!(fid, fs.rwalk(fid, newfid, wnames))),
             _ => Fcall::Rlerror { ecode: EOPNOTSUPP },
         };
-
-        if let Fcall::Tclunk { fid } = msg.body {
-            fids.remove(&fid);
-        }
 
         buf.resize(0, 0);
         match fcall::write_msg(&mut std::io::Cursor::new(&mut buf), &mut msg) {
