@@ -37,6 +37,9 @@ fn encode_stat<W: Write>(w: &mut W, v: &Stat) -> std::io::Result<()> {
     encode_time(w, &v.atime)?;
     encode_time(w, &v.mtime)?;
     encode_time(w, &v.ctime)?;
+    encode_time(w, &v.btime)?;
+    encode_u64(w, &v.gen)?;
+    encode_u64(w, &v.data_version)?;
     Ok(())
 }
 #[allow(clippy::all)]

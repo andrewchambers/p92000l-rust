@@ -159,7 +159,7 @@ impl p92000l::server::Filesystem for RoExport {
         &self,
         fid: &mut Self::Fid,
         offset: u64,
-        buf: &mut[u8],
+        buf: &mut [u8],
     ) -> Result<usize, fcall::Rlerror> {
         if fid.f.is_none() {
             fid.f = Some(std::fs::File::open(&fid.path)?);

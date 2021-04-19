@@ -7,7 +7,7 @@ use bitflags::bitflags;
 use enum_primitive::*;
 use std::convert::TryInto;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::os::unix::fs::MetadataExt;
 
 /// 9P2000 version string
@@ -218,6 +218,9 @@ impl<'a> From<&'a fs::Metadata> for Stat {
                 sec: attr.ctime() as u64,
                 nsec: attr.ctime_nsec() as u64,
             },
+            btime: Time { sec: 0, nsec: 0 },
+            gen: 0,
+            data_version: 0,
         }
     }
 }
@@ -431,6 +434,65 @@ pub struct NcMsg<'b> {
     pub body: NcFcall<'b>,
 }
 
+pub fn read_msg<'a, R: Read>(r: &'a mut R, buf: &'a mut Vec<u8>) -> std::io::Result<NcMsg<'a>> {
+    let mut sz = [0; 4];
+    r.read_exact(&mut sz[..])?;
+    let sz = u32::from_le_bytes(sz) as usize;
+    if sz > buf.capacity() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "remote violated protocol size limit",
+        ));
+    }
+    let sz = sz - 4;
+    buf.resize(sz, 0);
+    r.read_exact(&mut buf[..])?;
+    decode_msg(buf)
+}
+
+pub fn write_msg<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &Msg) -> std::io::Result<()> {
+    buf.truncate(0);
+    match msg {
+        Msg {
+            tag,
+            body: Fcall::Rread(Rread { ref data }),
+        } => {
+            // Zero copy Rread path.
+            let mut cursor = std::io::Cursor::new(buf);
+            let sz = 4 + 1 + 2 + 4 + data.len();
+            if sz > 0xffffffff {
+                return Err(invalid_9p_msg());
+            }
+            encode_u32(&mut cursor, &(sz as u32))?;
+            encode_u8(&mut cursor, &117)?;
+            encode_u16(&mut cursor, &tag)?;
+            encode_u32(&mut cursor, &(data.len() as u32))?;
+            let buf = cursor.into_inner();
+            w.write_all(&buf[..])?;
+            w.write_all(&data[..])?;
+            Ok(())
+        }
+        /* TODO, Zero copy Twrite path, mostly for client.
+        Msg {
+            tag,
+            body: Fcall::Twrite(Twrite { ref data }),
+        } => {
+        }
+        */
+        msg => {
+            // Slow path, encode the whole message to the buffer then write it.
+            let mut cursor = std::io::Cursor::new(buf);
+            encode_msg(&mut cursor, msg)?;
+            let buf = cursor.into_inner();
+            // vectored write or single write here?
+            let sz_bytes = &((buf.len() + 4) as u32).to_le_bytes()[..];
+            w.write_all(sz_bytes)?;
+            w.write_all(&buf[..])?;
+            Ok(())
+        }
+    }
+}
+
 struct Decoder<'b> {
     buf: &'b [u8],
 }
@@ -546,7 +608,7 @@ fn encode_direntrydata<W: Write>(w: &mut W, v: &DirEntryData) -> std::io::Result
             "dir entry vec too long for encoding",
         ));
     }
-    encode_u16(w, &(v.data.len() as u16))?;
+    encode_u32(w, &(v.size()))?;
     for v in v.data.iter() {
         encode_direntry(w, v)?;
     }

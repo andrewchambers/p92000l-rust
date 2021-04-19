@@ -34,6 +34,9 @@ pub struct Stat {
     pub atime: Time,
     pub mtime: Time,
     pub ctime: Time,
+    pub btime: Time,
+    pub gen: u64,
+    pub data_version: u64,
 }
 #[derive(Clone, Debug)]
 pub struct SetAttr {

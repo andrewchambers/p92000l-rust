@@ -198,39 +198,6 @@ pub trait Filesystem {
     }
 }
 
-fn read_msg<'a, R: Read>(r: &'a mut R, buf: &'a mut Vec<u8>) -> std::io::Result<NcMsg<'a>> {
-    let mut sz = [0; 4];
-    r.read_exact(&mut sz[..])?;
-    let sz = u32::from_le_bytes(sz) as usize;
-    if sz > buf.capacity() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "remote violated protocol size limit",
-        ));
-    }
-    dbg!(sz);
-    let sz = sz - 4;
-    buf.resize(sz, 0);
-    r.read_exact(&mut buf[..])?;
-    fcall::decode_msg(buf)
-}
-
-fn write_msg<W: Write>(
-    w: &mut W,
-    buf: &mut Vec<u8>,
-    msg: &fcall::Msg,
-) -> std::io::Result<()> {
-    buf.resize(0, 0);
-    let mut cursor = std::io::Cursor::new(buf);
-    fcall::encode_msg(&mut cursor, msg)?;
-    let buf = cursor.into_inner();
-    // vectored write or single write here?
-    let sz_bytes = &((buf.len() + 4) as u32).to_le_bytes()[..];
-    w.write_all(sz_bytes)?;
-    w.write_all(&buf[..])?;
-    Ok(())
-}
-
 pub fn serve_single_threaded<R, W, F>(r: &mut R, w: &mut W, fs: &mut F) -> ()
 where
     R: Read,
@@ -243,7 +210,7 @@ where
 
     // Handle version and size buffers.
     if !read_msg(r, &mut mbuf).is_ok() {
-      return ();
+        return ();
     }
 
     match fcall::decode_msg(&mbuf) {
@@ -275,9 +242,8 @@ where
         Err(_) => return (),
     }
 
-    while let Ok(msg) = read_msg(r, &mut mbuf) {
-      
-        dbg!(&msg);
+    while let Ok(msg) = fcall::read_msg(r, &mut mbuf) {
+        // dbg!(&msg);
 
         macro_rules! get_fid {
             ($ident:ident, $e:expr) => {
@@ -309,7 +275,9 @@ where
 
         let resp = match msg.body {
             NcFcall::Tstatfs(Tstatfs { fid }) => get_fid!(fid, fs.statfs(fid).into()),
-            NcFcall::Tlopen(Tlopen { fid, ref flags }) => get_fid!(fid, fs.lopen(fid, *flags).into()),
+            NcFcall::Tlopen(Tlopen { fid, ref flags }) => {
+                get_fid!(fid, fs.lopen(fid, *flags).into())
+            }
             NcFcall::Tlcreate(NcTlcreate {
                 fid,
                 ref name,
@@ -363,17 +331,17 @@ where
             }) => {
                 match fids.get_mut(&fid) {
                     Some(fid) => {
-                        dbuf.resize(*count as usize, 0);
-                        match fs.read(fid, *offset, &mut dbuf[0..*count as usize]) {
+                        let count = *count as usize;
+                        let count = count.min(dbuf.capacity());
+                        // This is safe as we just checked the count against the capacity.
+                        unsafe { dbuf.set_len(count) };
+                        match fs.read(fid, *offset, &mut dbuf[..]) {
                             Ok(n) => {
                                 // Temporarily borrow the data buffer, we swap it back later.
-                                dbuf.resize(n, 0);
+                                dbuf.truncate(n);
                                 let mut swapbuf = Vec::new();
                                 std::mem::swap(&mut dbuf, &mut swapbuf);
-                                fcall::Rread {
-                                    data: swapbuf,
-                                }
-                                .into()
+                                fcall::Rread { data: swapbuf }.into()
                             }
                             Err(rlerror) => rlerror.into(),
                         }
@@ -480,25 +448,21 @@ where
         };
 
         let resp_msg = fcall::Msg {
-          tag: msg.tag,
-          body: resp,
+            tag: msg.tag,
+            body: resp,
         };
 
-        dbg!(&resp_msg);
-        if !write_msg(w, &mut mbuf, &resp_msg).is_ok() {
+        // dbg!(&resp_msg);
+        if !fcall::write_msg(w, &mut mbuf, &resp_msg).is_ok() {
             break;
         }
 
         match resp_msg.body {
-          Fcall::Rread(Rread {
-            mut data
-          }) => {
-            // reclaim the data buffer.
-            std::mem::swap(&mut dbuf, &mut data);
-          },
-          _ => (),
+            Fcall::Rread(Rread { mut data }) => {
+                // reclaim the data buffer.
+                std::mem::swap(&mut dbuf, &mut data);
+            }
+            _ => (),
         }
     }
-
 }
-

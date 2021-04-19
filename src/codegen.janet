@@ -139,7 +139,10 @@
                                 blocks u64
                                 atime Time
                                 mtime Time
-                                ctime Time]
+                                ctime Time
+                                btime Time
+                                gen u64
+                                data_version u64]
                           SetAttr [mode u32
                                    uid u32
                                    gid u32
@@ -274,9 +277,7 @@ impl<'a, 'b: 'a> Decoder<'b> {
 
     fn decode_str(&mut self) -> std::io::Result<&'b str> {
         let n = self.decode_u16()? as usize;
-        if self.buf.len() < n {
-            Err(invalid_9p_msg())
-        } else {
+        if self.buf.len() >= n {
             match std::str::from_utf8(&self.buf[..n]) {
                 Ok(s) => {
                     self.buf = &self.buf[n..];
@@ -284,17 +285,19 @@ impl<'a, 'b: 'a> Decoder<'b> {
                 }
                 Err(_) => Err(invalid_9p_msg()),
             }
+        } else {
+            Err(invalid_9p_msg())
         }
     }
 
     fn decode_data_buf(&mut self) -> std::io::Result<&'b [u8]> {
         let n = self.decode_u32()? as usize;
-        if self.buf.len() < n {
-            Err(invalid_9p_msg())
-        } else {
+        if self.buf.len() >= n {
             let v = &self.buf[..n];
             self.buf = &self.buf[n..];
             Ok(v)
+        } else {
+            Err(invalid_9p_msg())
         }
     }
 

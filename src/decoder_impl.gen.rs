@@ -40,9 +40,7 @@ impl<'a, 'b: 'a> Decoder<'b> {
 
     fn decode_str(&mut self) -> std::io::Result<&'b str> {
         let n = self.decode_u16()? as usize;
-        if self.buf.len() < n {
-            Err(invalid_9p_msg())
-        } else {
+        if self.buf.len() >= n {
             match std::str::from_utf8(&self.buf[..n]) {
                 Ok(s) => {
                     self.buf = &self.buf[n..];
@@ -50,17 +48,19 @@ impl<'a, 'b: 'a> Decoder<'b> {
                 }
                 Err(_) => Err(invalid_9p_msg()),
             }
+        } else {
+            Err(invalid_9p_msg())
         }
     }
 
     fn decode_data_buf(&mut self) -> std::io::Result<&'b [u8]> {
         let n = self.decode_u32()? as usize;
-        if self.buf.len() < n {
-            Err(invalid_9p_msg())
-        } else {
+        if self.buf.len() >= n {
             let v = &self.buf[..n];
             self.buf = &self.buf[n..];
             Ok(v)
+        } else {
+            Err(invalid_9p_msg())
         }
     }
 
@@ -158,6 +158,9 @@ impl<'a, 'b: 'a> Decoder<'b> {
             atime: self.decode_time()?,
             mtime: self.decode_time()?,
             ctime: self.decode_time()?,
+            btime: self.decode_time()?,
+            gen: self.decode_u64()?,
+            data_version: self.decode_u64()?,
         })
     }
     #[allow(clippy::all)]
