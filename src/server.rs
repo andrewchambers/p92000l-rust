@@ -198,7 +198,7 @@ pub trait Filesystem {
     }
 }
 
-pub fn serve_single_threaded<R, W, F>(r: &mut R, w: &mut W, fs: &mut F) -> ()
+pub fn serve_single_threaded<R, W, F>(r: &mut R, w: &mut W, fs: &mut F)
 where
     R: Read,
     W: Write,
@@ -223,7 +223,7 @@ where
             let rversion = fs.version(*msize, version);
             assert!(rversion.msize <= *msize);
             mbuf.resize(rversion.msize as usize, 0);
-            if !write_msg(
+            if write_msg(
                 w,
                 &mut mbuf,
                 &fcall::Msg {
@@ -231,13 +231,13 @@ where
                     body: rversion.into(),
                 },
             )
-            .is_ok()
+            .is_err()
             {
-                return ();
+                return;
             }
         }
-        Ok(_) => return (),
-        Err(_) => return (),
+        Ok(_) => return,
+        Err(_) => return,
     }
 
     while let Ok(msg) = fcall::read_msg(r, &mut mbuf) {
@@ -451,16 +451,13 @@ where
         };
 
         // dbg!(&resp_msg);
-        if !fcall::write_msg(w, &mut mbuf, &resp_msg).is_ok() {
+        if fcall::write_msg(w, &mut mbuf, &resp_msg).is_err() {
             break;
         }
 
-        match resp_msg.body {
-            Fcall::Rread(Rread { mut data }) => {
-                // reclaim the data buffer.
-                std::mem::swap(&mut dbuf, &mut data);
-            }
-            _ => (),
+        if let Fcall::Rread(Rread { mut data }) = resp_msg.body {
+            // reclaim the data buffer.
+            std::mem::swap(&mut dbuf, &mut data);
         }
     }
 }
