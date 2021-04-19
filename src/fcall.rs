@@ -468,6 +468,7 @@ pub fn write_msg<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &Msg) -> std::io::
             encode_u16(&mut cursor, &tag)?;
             encode_u32(&mut cursor, &(data.len() as u32))?;
             let buf = cursor.into_inner();
+            // XXX vectored write?
             w.write_all(&buf[..])?;
             w.write_all(&data[..])?;
             Ok(())
@@ -484,7 +485,7 @@ pub fn write_msg<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &Msg) -> std::io::
             let mut cursor = std::io::Cursor::new(buf);
             encode_msg(&mut cursor, msg)?;
             let buf = cursor.into_inner();
-            // vectored write or single write here?
+            // XXX vectored write or single write here?
             let sz_bytes = &((buf.len() + 4) as u32).to_le_bytes()[..];
             w.write_all(sz_bytes)?;
             w.write_all(&buf[..])?;
@@ -497,13 +498,13 @@ struct Decoder<'b> {
     buf: &'b [u8],
 }
 
-fn invalid_9p_msg() -> std::io::Error {
-    std::io::Error::new(::std::io::ErrorKind::InvalidInput, "invalid 9p message")
-}
-
 pub fn decode_msg(buf: &[u8]) -> std::io::Result<NcMsg> {
     let mut d = Decoder { buf };
     d.decode_nc_msg()
+}
+
+fn invalid_9p_msg() -> std::io::Error {
+    std::io::Error::new(::std::io::ErrorKind::InvalidInput, "invalid 9p message")
 }
 
 fn encode_u8<W: Write>(w: &mut W, v: &u8) -> std::io::Result<()> {
