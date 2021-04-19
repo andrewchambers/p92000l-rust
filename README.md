@@ -9,5 +9,6 @@ The goals of the library:
 - Provide an interface for multi threaded 9p2000L servers.
 - Provide an interface for 9p2000L clients that is usable from multiple threads.
 - Provide support for as many platforms as possible.
+- Focus on performance (zero allocation and avoid copies as much as possible).
 - Focus on synchronous (not async) rust.
 - Focus on a small dependency footprint.
