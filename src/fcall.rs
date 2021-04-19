@@ -458,11 +458,13 @@ pub fn write_msg<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &Msg) -> std::io::
             body: Fcall::Rread(Rread { ref data }),
         } => {
             // Zero copy Rread path.
-            let mut cursor = std::io::Cursor::new(buf);
             let sz = 4 + 1 + 2 + 4 + data.len();
-            if sz > 0xffffffff {
+            if sz > buf.capacity() {
+                // The message was larger than the buffer.
+                // This must be larger than msize so flag the mistake.
                 return Err(invalid_9p_msg());
             }
+            let mut cursor = std::io::Cursor::new(buf);
             encode_u32(&mut cursor, &(sz as u32))?;
             encode_u8(&mut cursor, &117)?;
             encode_u16(&mut cursor, &tag)?;
