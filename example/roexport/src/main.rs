@@ -63,7 +63,7 @@ impl p92000l::server::Filesystem for RoExport {
         Ok((
             RoFid {
                 path,
-                qid,
+                qid: qid.clone(),
                 metadata,
                 f: None,
             },
@@ -79,14 +79,14 @@ impl p92000l::server::Filesystem for RoExport {
         Ok(fcall::Rgetattr {
             valid: req_mask,
             stat: (&fid.metadata).into(),
-            qid: fid.qid,
+            qid: fid.qid.clone(),
         })
     }
 
     fn walk(
         &self,
         fid: &mut Self::Fid,
-        wnames: &[String],
+        wnames: &[&str],
     ) -> Result<(Option<Self::Fid>, fcall::Rwalk), fcall::Rlerror> {
         let mut wqids = Vec::new();
         let mut path = fid.path.clone();
@@ -117,7 +117,7 @@ impl p92000l::server::Filesystem for RoExport {
 
     fn lopen(&self, fid: &mut Self::Fid, _flags: u32) -> Result<fcall::Rlopen, fcall::Rlerror> {
         Ok(fcall::Rlopen {
-            qid: fid.qid,
+            qid: fid.qid.clone(),
             iounit: 0,
         })
     }
@@ -159,21 +159,16 @@ impl p92000l::server::Filesystem for RoExport {
         &self,
         fid: &mut Self::Fid,
         offset: u64,
-        count: u32,
-    ) -> Result<fcall::Rread, fcall::Rlerror> {
+        buf: &mut[u8],
+    ) -> Result<usize, fcall::Rlerror> {
         if fid.f.is_none() {
             fid.f = Some(std::fs::File::open(&fid.path)?);
         }
         match fid.f {
             Some(ref mut f) => {
-                let mut buf = Vec::with_capacity(count as usize);
-                buf.resize(count as usize, 0);
                 f.seek(std::io::SeekFrom::Start(offset))?;
-                let n = f.read(&mut buf[..])?;
-                buf.truncate(n);
-                Ok(fcall::Rread {
-                    data: fcall::Data(buf),
-                })
+                let n = f.read(buf)?;
+                Ok(n)
             }
             _ => unreachable!(),
         }

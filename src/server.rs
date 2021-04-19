@@ -1,7 +1,6 @@
 use super::errno::*;
 use super::fcall;
 use super::fcall::*;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 
@@ -102,11 +101,11 @@ pub trait Filesystem {
         Err(Rlerror { ecode: EOPNOTSUPP })
     }
 
-    fn lock(&self, _: &mut Self::Fid, _lock: &Flock) -> Result<Rlock, Rlerror> {
+    fn lock(&self, _: &mut Self::Fid, _lock: &NcFlock) -> Result<Rlock, Rlerror> {
         Err(Rlerror { ecode: EOPNOTSUPP })
     }
 
-    fn getlock(&self, _: &mut Self::Fid, _lock: &Getlock) -> Result<Rgetlock, Rlerror> {
+    fn getlock(&self, _: &mut Self::Fid, _lock: &NcGetlock) -> Result<Rgetlock, Rlerror> {
         Err(Rlerror { ecode: EOPNOTSUPP })
     }
 
@@ -164,16 +163,16 @@ pub trait Filesystem {
     fn walk(
         &self,
         _: &mut Self::Fid,
-        _wnames: &[String],
+        _wnames: &[&str],
     ) -> Result<(Option<Self::Fid>, Rwalk), Rlerror> {
         Err(Rlerror { ecode: EOPNOTSUPP })
     }
 
-    fn read(&self, _: &mut Self::Fid, _offset: u64, _count: u32) -> Result<Rread, Rlerror> {
+    fn read(&self, _: &mut Self::Fid, _offset: u64, _buf: &mut [u8]) -> Result<usize, Rlerror> {
         Err(Rlerror { ecode: EOPNOTSUPP })
     }
 
-    fn write(&self, _: &mut Self::Fid, _offset: u64, _data: &Data) -> Result<Rwrite, Rlerror> {
+    fn write(&self, _: &mut Self::Fid, _offset: u64, _data: &[u8]) -> Result<Rwrite, Rlerror> {
         Err(Rlerror { ecode: EOPNOTSUPP })
     }
 
@@ -199,26 +198,85 @@ pub trait Filesystem {
     }
 }
 
+fn read_msg<'a, R: Read>(r: &'a mut R, buf: &'a mut Vec<u8>) -> std::io::Result<NcMsg<'a>> {
+    let mut sz = [0; 4];
+    r.read_exact(&mut sz[..])?;
+    let sz = u32::from_le_bytes(sz) as usize;
+    if sz > buf.capacity() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "remote violated protocol size limit",
+        ));
+    }
+    dbg!(sz);
+    let sz = sz - 4;
+    buf.resize(sz, 0);
+    r.read_exact(&mut buf[..])?;
+    fcall::decode_msg(buf)
+}
+
+fn write_msg<W: Write>(
+    w: &mut W,
+    buf: &mut Vec<u8>,
+    msg: &fcall::Msg,
+) -> std::io::Result<()> {
+    buf.resize(0, 0);
+    let mut cursor = std::io::Cursor::new(buf);
+    fcall::encode_msg(&mut cursor, msg)?;
+    let buf = cursor.into_inner();
+    // vectored write or single write here?
+    let sz_bytes = &((buf.len() + 4) as u32).to_le_bytes()[..];
+    w.write_all(sz_bytes)?;
+    w.write_all(&buf[..])?;
+    Ok(())
+}
+
 pub fn serve_single_threaded<R, W, F>(r: &mut R, w: &mut W, fs: &mut F) -> ()
 where
-    R: Read + ReadBytesExt,
-    W: Write + WriteBytesExt,
+    R: Read,
+    W: Write,
     F: Filesystem,
 {
     let mut fids = HashMap::<u32, F::Fid>::new();
+    let mut mbuf: Vec<u8> = Vec::with_capacity(65536);
+    let mut dbuf: Vec<u8> = Vec::with_capacity(8192);
 
-    let mut buf: Vec<u8> = Vec::with_capacity(65536);
+    // Handle version and size buffers.
+    if !read_msg(r, &mut mbuf).is_ok() {
+      return ();
+    }
 
-    while let Ok(sz) = r.read_u32::<LittleEndian>() {
-        let sz = (sz as usize) - 4;
-        buf.resize(sz, 0);
-        if !r.read_exact(&mut buf[..]).is_ok() {
-            break;
+    match fcall::decode_msg(&mbuf) {
+        Ok(fcall::NcMsg {
+            tag: fcall::NOTAG,
+            body:
+                NcFcall::Tversion(NcTversion {
+                    ref msize,
+                    ref version,
+                }),
+        }) => {
+            let rversion = fs.version(*msize, version);
+            assert!(rversion.msize <= *msize);
+            mbuf.resize(rversion.msize as usize, 0);
+            if !write_msg(
+                w,
+                &mut mbuf,
+                &fcall::Msg {
+                    tag: fcall::NOTAG,
+                    body: rversion.into(),
+                },
+            )
+            .is_ok()
+            {
+                return ();
+            }
         }
-        let mut msg = match fcall::read_msg(&mut std::io::Cursor::new(&buf)) {
-            Ok(msg) => msg,
-            _ => break,
-        };
+        Ok(_) => return (),
+        Err(_) => return (),
+    }
+
+    while let Ok(msg) = read_msg(r, &mut mbuf) {
+      
         dbg!(&msg);
 
         macro_rules! get_fid {
@@ -249,23 +307,23 @@ where
             }};
         }
 
-        msg.body = match msg.body {
-            Fcall::Tstatfs(Tstatfs { fid }) => get_fid!(fid, fs.statfs(fid).into()),
-            Fcall::Tlopen(Tlopen { fid, ref flags }) => get_fid!(fid, fs.lopen(fid, *flags).into()),
-            Fcall::Tlcreate(Tlcreate {
+        let resp = match msg.body {
+            NcFcall::Tstatfs(Tstatfs { fid }) => get_fid!(fid, fs.statfs(fid).into()),
+            NcFcall::Tlopen(Tlopen { fid, ref flags }) => get_fid!(fid, fs.lopen(fid, *flags).into()),
+            NcFcall::Tlcreate(NcTlcreate {
                 fid,
                 ref name,
                 ref flags,
                 ref mode,
                 ref gid,
             }) => get_fid!(fid, fs.lcreate(fid, name, *flags, *mode, *gid).into()),
-            Fcall::Tsymlink(Tsymlink {
+            NcFcall::Tsymlink(NcTsymlink {
                 fid,
                 ref name,
                 ref symtgt,
                 ref gid,
             }) => get_fid!(fid, fs.symlink(fid, name, symtgt, *gid).into()),
-            Fcall::Tmknod(Tmknod {
+            NcFcall::Tmknod(NcTmknod {
                 dfid,
                 ref name,
                 ref mode,
@@ -276,61 +334,77 @@ where
                 dfid,
                 fs.mknod(dfid, name, *mode, *major, *minor, *gid).into()
             ),
-            Fcall::Treadlink(Treadlink { fid }) => get_fid!(fid, fs.readlink(fid).into()),
-            Fcall::Tgetattr(Tgetattr { fid, ref req_mask }) => {
+            NcFcall::Treadlink(Treadlink { fid }) => get_fid!(fid, fs.readlink(fid).into()),
+            NcFcall::Tgetattr(Tgetattr { fid, ref req_mask }) => {
                 get_fid!(fid, fs.getattr(fid, *req_mask).into())
             }
-            Fcall::Tsetattr(Tsetattr {
+            NcFcall::Tsetattr(Tsetattr {
                 fid,
                 ref valid,
                 ref stat,
             }) => get_fid!(fid, fs.setattr(fid, *valid, stat).into()),
-            Fcall::Treaddir(Treaddir {
+            NcFcall::Treaddir(Treaddir {
                 fid,
                 ref offset,
                 ref count,
             }) => get_fid!(fid, fs.readdir(fid, *offset, *count).into()),
-            Fcall::Tfsync(Tfsync { fid }) => get_fid!(fid, fs.fsync(fid).into()),
-            Fcall::Tmkdir(Tmkdir {
+            NcFcall::Tfsync(Tfsync { fid }) => get_fid!(fid, fs.fsync(fid).into()),
+            NcFcall::Tmkdir(NcTmkdir {
                 dfid,
                 ref name,
                 ref mode,
                 ref gid,
             }) => get_fid!(dfid, fs.mkdir(dfid, name, *mode, *gid).into()),
-            Fcall::Tversion(Tversion {
-                ref msize,
-                ref version,
-            }) => fs.version(*msize, version).into(),
-            Fcall::Tflush(Tflush { .. }) => fs.flush().into(),
-            Fcall::Tread(Tread {
+            NcFcall::Tflush(Tflush { .. }) => fs.flush().into(),
+            NcFcall::Tread(Tread {
                 fid,
                 ref offset,
                 ref count,
-            }) => get_fid!(fid, fs.read(fid, *offset, *count).into()),
-            Fcall::Twrite(Twrite {
+            }) => {
+                match fids.get_mut(&fid) {
+                    Some(fid) => {
+                        dbuf.resize(*count as usize, 0);
+                        match fs.read(fid, *offset, &mut dbuf[0..*count as usize]) {
+                            Ok(n) => {
+                                // Temporarily borrow the data buffer, we swap it back later.
+                                dbuf.resize(n, 0);
+                                let mut swapbuf = Vec::new();
+                                std::mem::swap(&mut dbuf, &mut swapbuf);
+                                fcall::Rread {
+                                    data: swapbuf,
+                                }
+                                .into()
+                            }
+                            Err(rlerror) => rlerror.into(),
+                        }
+                    }
+                    None => Fcall::Rlerror(fcall::Rlerror { ecode: EBADF }),
+                }
+            }
+            NcFcall::Twrite(NcTwrite {
                 fid,
                 ref offset,
                 ref data,
             }) => get_fid!(fid, fs.write(fid, *offset, data).into()),
-            Fcall::Tclunk(Tclunk { fid }) => {
+            NcFcall::Tclunk(Tclunk { fid }) => {
                 let r = get_fid!(fid, fs.clunk(fid).into());
                 if let Fcall::Rclunk(_) = r {
                     fids.remove(&fid);
                 }
                 r
             }
-            Fcall::Tremove(Tremove { fid }) => get_fid!(fid, fs.remove(fid).into()),
-            Fcall::Trename(Trename {
+            NcFcall::Tremove(Tremove { fid }) => get_fid!(fid, fs.remove(fid).into()),
+            NcFcall::Trename(NcTrename {
                 fid,
                 dfid,
                 ref name,
             }) => get_fids!(fid, dfid, fs.rename(fid, dfid, name).into()),
-            Fcall::Tlink(Tlink {
+            NcFcall::Tlink(NcTlink {
                 dfid,
                 fid,
                 ref name,
             }) => get_fids!(fid, dfid, fs.link(dfid, fid, name).into()),
-            Fcall::Trenameat(Trenameat {
+            NcFcall::Trenameat(NcTrenameat {
                 olddirfid,
                 ref oldname,
                 newdirfid,
@@ -340,29 +414,29 @@ where
                 newdirfid,
                 fs.renameat(olddirfid, oldname, newdirfid, newname).into()
             ),
-            Fcall::Tunlinkat(Tunlinkat {
+            NcFcall::Tunlinkat(NcTunlinkat {
                 dirfd,
                 ref name,
                 ref flags,
             }) => get_fid!(dirfd, fs.unlinkat(dirfd, name, *flags).into()),
             /*
-            Fcall::Txattrwalk {
+            NcFcall::Txattrwalk {
                 fid,
                 newfid,
                 ref name,
             } => new_fid!(newfid, get_fid!(fid, fs.rxattrwalk(fid, newfid, name))),
-            Fcall::Txattrcreate {
+            NcFcall::Txattrcreate {
                 fid,
                 ref name,
                 ref attr_size,
                 ref flags,
             } => get_fid!(fid, fs.rxattrcreate(fid, name, *attr_size, *flags)),
             */
-            Fcall::Tlock(Tlock { fid, ref flock }) => get_fid!(fid, fs.lock(fid, flock).into()),
-            Fcall::Tgetlock(Tgetlock { fid, ref flock }) => {
+            NcFcall::Tlock(NcTlock { fid, ref flock }) => get_fid!(fid, fs.lock(fid, flock).into()),
+            NcFcall::Tgetlock(NcTgetlock { fid, ref flock }) => {
                 get_fid!(fid, fs.getlock(fid, flock).into())
             }
-            Fcall::Tauth(Tauth {
+            NcFcall::Tauth(NcTauth {
                 afid,
                 ref uname,
                 ref aname,
@@ -374,7 +448,7 @@ where
                 }
                 Err(rlerror) => rlerror.into(),
             },
-            Fcall::Tattach(Tattach {
+            NcFcall::Tattach(NcTattach {
                 fid,
                 afid: _,
                 ref uname,
@@ -387,7 +461,7 @@ where
                 }
                 Err(rlerror) => rlerror.into(),
             },
-            Fcall::Twalk(Twalk {
+            NcFcall::Twalk(NcTwalk {
                 fid,
                 newfid,
                 ref wnames,
@@ -405,20 +479,26 @@ where
             _ => Fcall::Rlerror(fcall::Rlerror { ecode: EOPNOTSUPP }),
         };
 
-        dbg!(&msg);
+        let resp_msg = fcall::Msg {
+          tag: msg.tag,
+          body: resp,
+        };
 
-        buf.resize(0, 0);
-        match fcall::write_msg(&mut std::io::Cursor::new(&mut buf), &msg) {
-            Ok(msg) => msg,
-            _ => break,
-        };
-        // XXX vectored write, or put size in buf.
-        let sz_bytes = &((buf.len() + 4) as u32).to_le_bytes()[..];
-        if !w.write_all(sz_bytes).is_ok() {
+        dbg!(&resp_msg);
+        if !write_msg(w, &mut mbuf, &resp_msg).is_ok() {
             break;
-        };
-        if !w.write_all(&buf[..]).is_ok() {
-            break;
-        };
+        }
+
+        match resp_msg.body {
+          Fcall::Rread(Rread {
+            mut data
+          }) => {
+            // reclaim the data buffer.
+            std::mem::swap(&mut dbuf, &mut data);
+          },
+          _ => (),
+        }
     }
+
 }
+

@@ -8,7 +8,7 @@ edition = "2018"
 name = "roexport"
 
 [dependencies]
-nix = "0.18"
+nix = "*"
 
 [dependencies.p92000l]
 path = "../../"
