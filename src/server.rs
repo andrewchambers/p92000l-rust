@@ -205,15 +205,13 @@ where
     F: Filesystem,
 {
     let mut fids = HashMap::<u32, F::Fid>::new();
+    // Message buffer.
     let mut mbuf: Vec<u8> = Vec::with_capacity(65536);
+    // Data buffer.
     let mut dbuf: Vec<u8> = Vec::with_capacity(8192);
 
     // Handle version and size buffers.
-    if !read_msg(r, &mut mbuf).is_ok() {
-        return ();
-    }
-
-    match fcall::decode_msg(&mbuf) {
+    match fcall::read_msg(r, &mut mbuf) {
         Ok(fcall::NcMsg {
             tag: fcall::NOTAG,
             body:
