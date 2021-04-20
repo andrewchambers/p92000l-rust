@@ -63,7 +63,7 @@ impl p92000l::server::Filesystem for RoExport {
         Ok((
             RoFid {
                 path,
-                qid: qid.clone(),
+                qid: qid,
                 metadata,
                 f: None,
             },
@@ -79,7 +79,7 @@ impl p92000l::server::Filesystem for RoExport {
         Ok(fcall::Rgetattr {
             valid: req_mask,
             stat: (&fid.metadata).into(),
-            qid: fid.qid.clone(),
+            qid: fid.qid,
         })
     }
 
@@ -117,7 +117,7 @@ impl p92000l::server::Filesystem for RoExport {
 
     fn lopen(&self, fid: &mut Self::Fid, _flags: u32) -> Result<fcall::Rlopen, fcall::Rlerror> {
         Ok(fcall::Rlopen {
-            qid: fid.qid.clone(),
+            qid: fid.qid,
             iounit: 0,
         })
     }

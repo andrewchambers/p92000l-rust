@@ -178,6 +178,12 @@
     "Data" "Vec<u8>"
     tname))
 
+(defn type-wants-copy-derive
+  [tname]
+  (def tname (string tname))
+  (find-index |(= $ tname)
+    ["Qid" "Stat" "Time" "Statfs" "SetAttr"]))
+
 (defn no-copy-rust-type-name
   [tname]
   (def tname (string tname))
@@ -358,12 +364,12 @@ impl<'a, 'b: 'a> Decoder<'b> {
   [types]
   (each [name fields] (partition 2 types)
     (when (type-has-no-copy-variant? name)
-      (print "#[derive(Clone, Debug)]")
+      (print "#[derive(Clone, Debug" (when (type-wants-copy-derive name) ", Copy") ")]")
       (print "pub struct " (no-copy-rust-type-name name) " {")
       (each [fname ftype] (partition 2 fields)
         (print "  pub " fname ": " (no-copy-rust-type-name ftype) ","))
       (print "}"))
-    (print "#[derive(Clone, Debug)]")
+    (print "#[derive(Clone, Debug" (when (type-wants-copy-derive name) ", Copy") ")]")
     (print "pub struct " name " {")
     (each [fname ftype] (partition 2 fields)
       (print "  pub " fname ": " (rust-type-name ftype) ","))

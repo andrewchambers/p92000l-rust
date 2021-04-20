@@ -1,10 +1,10 @@
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct Qid {
     pub typ: QidType,
     pub version: u32,
     pub path: u64,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct Statfs {
     pub typ: u32,
     pub bsize: u32,
@@ -16,12 +16,12 @@ pub struct Statfs {
     pub fsid: u64,
     pub namelen: u32,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct Time {
     pub sec: u64,
     pub nsec: u64,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct Stat {
     pub mode: u32,
     pub uid: u32,
@@ -38,7 +38,7 @@ pub struct Stat {
     pub gen: u64,
     pub data_version: u64,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct SetAttr {
     pub mode: u32,
     pub uid: u32,
