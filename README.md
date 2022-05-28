@@ -1,6 +1,6 @@
 # P92000
 
-A rust library for the 9P2000 and 9P2000.L protocols.
+A rust library for the 9P2000 and 9P2000.L protocols. Note, the name starts with P9 instead of 9P because rust forbids identifiers that begin with numbers.
 
 This library is primarily developed to facilitate user space rust 9P2000.L clients
 interacting with the [distributed io daemon](https://github.com/chaos/diod).
