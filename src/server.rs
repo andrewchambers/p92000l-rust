@@ -222,7 +222,9 @@ where
         }) => {
             let rversion = fs.version(*msize, version);
             assert!(rversion.msize <= *msize);
+            assert!(rversion.msize >= 512);
             mbuf.resize(rversion.msize as usize, 0);
+            dbuf.resize((rversion.msize - fcall::IOHDRSZ) as usize, 0);
             if write_msg(
                 w,
                 &mut mbuf,
