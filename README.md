@@ -14,7 +14,7 @@ Tertiary goals include support for other 9P variants and letting people write th
 
 In other words, the library aims to:
 
-- Initially focus on 9p2000.L.
+- Implement 9p with an initial emphasis on 9p2000.L.
 - Provide an interface for 9p clients that is usable from multiple threads.
 - Provide an interface for single threaded 9p servers.
 - Provide an interface for multi threaded 9p servers.
