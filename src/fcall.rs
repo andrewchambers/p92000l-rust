@@ -1,8 +1,3 @@
-//! 9P protocol data types and constants.
-//!
-//! # Protocol
-//! 9P2000.L
-
 use bitflags::bitflags;
 use enum_primitive::*;
 use std::borrow::Cow;
