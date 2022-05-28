@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 
-pub trait Filesystem {
+pub trait DotlFilesystem {
     type Fid;
 
     fn statfs(&self, _: &mut Self::Fid) -> Result<Rstatfs, Rlerror> {
@@ -204,11 +204,11 @@ pub trait Filesystem {
     }
 }
 
-pub fn serve_single_threaded<R, W, F>(r: &mut R, w: &mut W, fs: &mut F)
+pub fn serve_dotl_single_threaded<R, W, F>(r: &mut R, w: &mut W, fs: &mut F)
 where
     R: Read,
     W: Write,
-    F: Filesystem,
+    F: DotlFilesystem,
 {
     let mut fids = HashMap::<u32, F::Fid>::new();
     // Message buffer.

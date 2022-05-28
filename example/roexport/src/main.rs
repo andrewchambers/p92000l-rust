@@ -1,13 +1,12 @@
 use p92000::fcall;
 use p92000::fcall::Qid;
-use p92000::errno;
 use std::borrow::Cow;
 use std::fs;
 use std::io::Read;
 use std::io::Seek;
 use std::net::TcpListener;
-use std::path::{Path, PathBuf};
 use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 
 struct RoExport {}
 
@@ -47,7 +46,7 @@ pub fn get_dirent(entry: &fs::DirEntry, offset: u64) -> std::io::Result<fcall::D
 }
 
 // An example filesystem doing many things inefficient but simple ways.
-impl p92000l::server::Filesystem for RoExport {
+impl p92000::server::DotlFilesystem for RoExport {
     type Fid = RoFid;
 
     fn attach(
@@ -186,6 +185,6 @@ fn main() {
     for stream in listener.incoming() {
         let mut stream1 = stream.unwrap();
         let mut stream2 = stream1.try_clone().unwrap();
-        p92000l::server::serve_single_threaded(&mut stream1, &mut stream2, &mut fs);
+        p92000::server::serve_dotl_single_threaded(&mut stream1, &mut stream2, &mut fs);
     }
 }

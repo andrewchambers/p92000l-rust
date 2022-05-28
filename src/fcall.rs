@@ -17,9 +17,6 @@ pub const P92000: &str = "9P2000";
 /// 9P2000.L version string
 pub const P92000L: &str = "9P2000.L";
 
-/*
- * 9P magic numbers
- */
 /// Special tag which `Tversion`/`Rversion` must use as `tag`
 pub const NOTAG: u16 = !0;
 
@@ -32,7 +29,7 @@ pub const NOFID: u32 = !0;
 /// Special uid which `Tauth`/`Tattach` use as `n_uname` to indicate no uid is specified
 pub const NONUNAME: u32 = !0;
 
-/// Ample room for `Twrite`/`Rread` header
+/// Room for `Twrite`/`Rread` header
 ///
 /// size[4] Tread/Twrite[2] tag[2] fid[4] offset[8] count[4]
 pub const IOHDRSZ: u32 = 24;
@@ -232,7 +229,6 @@ impl<'a> DirEntry<'a> {
     }
 }
 
-/// Directory entry array
 #[derive(Clone, Debug)]
 pub struct DirEntryData<'a> {
     pub data: Vec<DirEntry<'a>>,
