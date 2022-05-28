@@ -1,5 +1,6 @@
 use p92000l::fcall;
 use p92000l::fcall::Qid;
+use std::borrow::Cow;
 use std::fs;
 use std::io::Read;
 use std::io::Seek;
@@ -26,22 +27,22 @@ fn qid_from_metadata(attr: &std::fs::Metadata) -> Qid {
     }
 }
 
-fn get_dirent_from(p: &Path, offset: u64) -> std::io::Result<fcall::DirEntry> {
+fn get_dirent_from(p: &Path, offset: u64) -> std::io::Result<fcall::DirEntry<'static>> {
     let metadata = std::fs::metadata(p)?;
     Ok(fcall::DirEntry {
         qid: qid_from_metadata(&metadata),
-        offset: offset,
+        offset,
         typ: 0,
-        name: p.to_string_lossy().into_owned(),
+        name: Cow::from(p.to_string_lossy().into_owned()),
     })
 }
 
-pub fn get_dirent(entry: &fs::DirEntry, offset: u64) -> std::io::Result<fcall::DirEntry> {
+pub fn get_dirent(entry: &fs::DirEntry, offset: u64) -> std::io::Result<fcall::DirEntry<'static>> {
     Ok(fcall::DirEntry {
         qid: qid_from_metadata(&entry.metadata()?),
-        offset: offset,
+        offset,
         typ: 0,
-        name: entry.file_name().to_string_lossy().into_owned(),
+        name: Cow::from(entry.file_name().to_string_lossy().into_owned()),
     })
 }
 
@@ -63,7 +64,7 @@ impl p92000l::server::Filesystem for RoExport {
         Ok((
             RoFid {
                 path,
-                qid: qid,
+                qid,
                 metadata,
                 f: None,
             },
@@ -86,13 +87,13 @@ impl p92000l::server::Filesystem for RoExport {
     fn walk(
         &self,
         fid: &mut Self::Fid,
-        wnames: &[&str],
+        wnames: &[Cow<'_, str>],
     ) -> Result<(Option<Self::Fid>, fcall::Rwalk), fcall::Rlerror> {
         let mut wqids = Vec::new();
         let mut path = fid.path.clone();
 
         for (_i, name) in wnames.iter().enumerate() {
-            path.push(name);
+            path.push(name.as_ref());
             if let Ok(metadata) = fs::symlink_metadata(&path) {
                 let qid = qid_from_metadata(&metadata);
                 wqids.push(qid);
@@ -127,8 +128,8 @@ impl p92000l::server::Filesystem for RoExport {
         fid: &mut Self::Fid,
         off: u64,
         count: u32,
-    ) -> Result<fcall::Rreaddir, fcall::Rlerror> {
-        let mut dirents = fcall::DirEntryData::new();
+    ) -> Result<fcall::Rreaddir<'static>, fcall::Rlerror> {
+        let mut dirents = fcall::DirEntryData::<'static>::new();
 
         let offset = if off == 0 {
             dirents.push(get_dirent_from(&PathBuf::from("."), 0)?);
@@ -139,10 +140,10 @@ impl p92000l::server::Filesystem for RoExport {
         } as usize;
 
         // Note, In a 'production' filesystem you should try to preserve state between calls.
-        let mut entries = std::fs::read_dir(&fid.path)?.skip(offset);
+        let entries = std::fs::read_dir(&fid.path)?.skip(offset);
 
         let mut i = offset;
-        while let Some(entry) = entries.next() {
+        for entry in entries {
             let entry = entry?;
             let dirent = get_dirent(&entry, 2 + i as u64)?;
             if dirents.size() + dirent.size() > count {
