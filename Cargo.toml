@@ -1,8 +1,8 @@
 [package]
-name = "p92000l"
+name = "p92000"
 version = "0.1.0"
 authors = ["Andrew Chambers <ac@acha.ninja>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 

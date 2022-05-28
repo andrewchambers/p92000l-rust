@@ -2,7 +2,7 @@
 name = "roexport"
 version = "0.0.1"
 authors = [ "andrewchambers <ac@acha.ninja>" ]
-edition = "2018"
+edition = "2021"
 
 [[bin]]
 name = "roexport"
@@ -10,7 +10,7 @@ name = "roexport"
 [dependencies]
 nix = "*"
 
-[dependencies.p92000l]
+[dependencies.p92000]
 path = "../../"
 
 [profile.release]

@@ -1,12 +1,12 @@
-use p92000l::fcall;
-use p92000l::fcall::Qid;
+use p92000::fcall;
+use p92000::fcall::Qid;
+use p92000::errno;
 use std::borrow::Cow;
 use std::fs;
 use std::io::Read;
 use std::io::Seek;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-// use p92000l::errno;
 use std::os::unix::fs::MetadataExt;
 
 struct RoExport {}
