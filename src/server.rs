@@ -382,20 +382,20 @@ where
                 ref name,
             }) => get_fids!(fid, dfid, fs.link(dfid, fid, name).into()),
             Fcall::Trenameat(Trenameat {
-                olddirfid,
+                olddfid,
                 ref oldname,
-                newdirfid,
+                newdfid,
                 ref newname,
             }) => get_fids!(
-                olddirfid,
-                newdirfid,
-                fs.renameat(olddirfid, oldname, newdirfid, newname).into()
+                olddfid,
+                newdfid,
+                fs.renameat(olddfid, oldname, newdfid, newname).into()
             ),
             Fcall::Tunlinkat(Tunlinkat {
-                dirfd,
+                dfid,
                 ref name,
                 ref flags,
-            }) => get_fid!(dirfd, fs.unlinkat(dirfd, name, *flags).into()),
+            }) => get_fid!(dfid, fs.unlinkat(dfid, name, *flags).into()),
             /*
             Fcall::Txattrwalk {
                 fid,

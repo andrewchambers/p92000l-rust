@@ -652,9 +652,9 @@ pub struct Rmkdir {
 
 #[derive(Clone, Debug)]
 pub struct Trenameat<'a> {
-    pub olddirfid: u32,
+    pub olddfid: u32,
     pub oldname: Cow<'a, str>,
-    pub newdirfid: u32,
+    pub newdfid: u32,
     pub newname: Cow<'a, str>,
 }
 
@@ -663,7 +663,7 @@ pub struct Rrenameat {}
 
 #[derive(Clone, Debug)]
 pub struct Tunlinkat<'a> {
-    pub dirfd: u32,
+    pub dfid: u32,
     pub name: Cow<'a, str>,
     pub flags: u32,
 }
@@ -1101,6 +1101,195 @@ pub enum Fcall<'a> {
     Rremove(Rremove),
 }
 
+impl<'a> Fcall<'a> {
+    pub fn clone_static(&self) -> Fcall<'static> {
+        match self {
+            Fcall::Rlerror(ref v) => Fcall::Rlerror(v.clone()),
+            Fcall::Tattach(ref v) => Fcall::Tattach(Tattach {
+                afid: v.afid,
+                fid: v.fid,
+                n_uname: v.n_uname.to_owned(),
+                aname: Cow::from(v.aname.clone().into_owned()),
+                uname: Cow::from(v.uname.clone().into_owned()),
+            }),
+            Fcall::Rattach(ref v) => Fcall::Rattach(v.clone()),
+            Fcall::Tstatfs(v) => Fcall::Tstatfs(v.clone()),
+            Fcall::Rstatfs(v) => Fcall::Rstatfs(v.clone()),
+            Fcall::Tlopen(v) => Fcall::Tlopen(v.clone()),
+            Fcall::Rlopen(v) => Fcall::Rlopen(v.clone()),
+            Fcall::Tlcreate(v) => Fcall::Tlcreate(Tlcreate {
+                fid: v.fid,
+                flags: v.flags,
+                gid: v.gid,
+                mode: v.mode,
+                name: Cow::from(v.name.clone().into_owned()),
+            }),
+            Fcall::Rlcreate(v) => Fcall::Rlcreate(v.clone()),
+            Fcall::Tsymlink(v) => Fcall::Tsymlink(Tsymlink {
+                fid: v.fid,
+                gid: v.gid,
+                name: Cow::from(v.name.clone().into_owned()),
+                symtgt: Cow::from(v.symtgt.clone().into_owned()),
+            }),
+            Fcall::Rsymlink(v) => Fcall::Rsymlink(v.clone()),
+            Fcall::Tmknod(v) => Fcall::Tmknod(Tmknod {
+                dfid: v.dfid,
+                gid: v.gid,
+                major: v.major,
+                minor: v.minor,
+                mode: v.mode,
+                name: Cow::from(v.name.clone().into_owned()),
+            }),
+            Fcall::Rmknod(v) => Fcall::Rmknod(v.clone()),
+            Fcall::Trename(v) => Fcall::Trename(Trename {
+                fid: v.fid,
+                dfid: v.dfid,
+                name: Cow::from(v.name.clone().into_owned()),
+            }),
+            Fcall::Rrename(v) => Fcall::Rrename(v.clone()),
+            Fcall::Treadlink(v) => Fcall::Treadlink(v.clone()),
+            Fcall::Rreadlink(v) => Fcall::Rreadlink(Rreadlink {
+                target: Cow::from(v.target.clone().into_owned()),
+            }),
+            Fcall::Tgetattr(v) => Fcall::Tgetattr(v.clone()),
+            Fcall::Rgetattr(v) => Fcall::Rgetattr(v.clone()),
+            Fcall::Tsetattr(v) => Fcall::Tsetattr(v.clone()),
+            Fcall::Rsetattr(v) => Fcall::Rsetattr(v.clone()),
+            Fcall::Txattrwalk(v) => Fcall::Txattrwalk(Txattrwalk {
+                fid: v.fid,
+                newfid: v.newfid,
+                name: Cow::from(v.name.clone().into_owned()),
+            }),
+            Fcall::Rxattrwalk(v) => Fcall::Rxattrwalk(v.clone()),
+            Fcall::Txattrcreate(v) => Fcall::Txattrcreate(Txattrcreate {
+                fid: v.fid,
+                attr_size: v.attr_size,
+                flags: v.flags,
+                name: Cow::from(v.name.clone().into_owned()),
+            }),
+            Fcall::Rxattrcreate(v) => Fcall::Rxattrcreate(v.clone()),
+            Fcall::Treaddir(v) => Fcall::Treaddir(v.clone()),
+            Fcall::Rreaddir(v) => Fcall::Rreaddir(Rreaddir {
+                data: DirEntryData {
+                    data: v
+                        .data
+                        .data
+                        .iter()
+                        .map(|de| DirEntry {
+                            qid: de.qid,
+                            offset: de.offset,
+                            typ: de.typ,
+                            name: Cow::from(de.name.clone().into_owned()),
+                        })
+                        .collect(),
+                },
+            }),
+
+            Fcall::Tfsync(v) => Fcall::Tfsync(v.clone()),
+            Fcall::Rfsync(v) => Fcall::Rfsync(v.clone()),
+            Fcall::Tlock(v) => Fcall::Tlock(Tlock {
+                fid: v.fid,
+                flock: Flock {
+                    typ: v.flock.typ,
+                    flags: v.flock.flags,
+                    start: v.flock.start,
+                    length: v.flock.length,
+                    proc_id: v.flock.proc_id,
+                    client_id: Cow::from(v.flock.client_id.clone().into_owned()),
+                },
+            }),
+            Fcall::Rlock(v) => Fcall::Rlock(v.clone()),
+            Fcall::Tgetlock(v) => Fcall::Tgetlock(Tgetlock {
+                fid: v.fid,
+                flock: Getlock {
+                    typ: v.flock.typ,
+                    start: v.flock.start,
+                    length: v.flock.length,
+                    proc_id: v.flock.proc_id,
+                    client_id: Cow::from(v.flock.client_id.clone().into_owned()),
+                },
+            }),
+            Fcall::Rgetlock(v) => Fcall::Rgetlock(Rgetlock {
+                flock: Getlock {
+                    typ: v.flock.typ,
+                    start: v.flock.start,
+                    length: v.flock.length,
+                    proc_id: v.flock.proc_id,
+                    client_id: Cow::from(v.flock.client_id.clone().into_owned()),
+                },
+            }),
+            Fcall::Tlink(v) => Fcall::Tlink(Tlink {
+                fid: v.fid,
+                dfid: v.dfid,
+                name: Cow::from(v.name.clone().into_owned()),
+            }),
+            Fcall::Rlink(v) => Fcall::Rlink(v.clone()),
+
+            Fcall::Tmkdir(v) => Fcall::Tmkdir(Tmkdir {
+                dfid: v.dfid,
+                gid: v.gid,
+                mode: v.mode,
+                name: Cow::from(v.name.clone().into_owned()),
+            }),
+            Fcall::Rmkdir(v) => Fcall::Rmkdir(v.clone()),
+            Fcall::Trenameat(v) => Fcall::Trenameat(Trenameat {
+                newdfid: v.newdfid,
+                olddfid: v.olddfid,
+                newname: Cow::from(v.newname.clone().into_owned()),
+                oldname: Cow::from(v.oldname.clone().into_owned()),
+            }),
+            Fcall::Rrenameat(v) => Fcall::Rrenameat(v.clone()),
+            Fcall::Tunlinkat(v) => Fcall::Tunlinkat(Tunlinkat {
+                dfid: v.dfid,
+                flags: v.flags,
+                name: Cow::from(v.name.clone().into_owned()),
+            }),
+            Fcall::Runlinkat(v) => Fcall::Runlinkat(v.clone()),
+            Fcall::Tauth(v) => Fcall::Tauth(Tauth {
+                afid: v.afid,
+                n_uname: v.n_uname,
+                aname: Cow::from(v.aname.clone().into_owned()),
+                uname: Cow::from(v.uname.clone().into_owned()),
+            }),
+            Fcall::Rauth(v) => Fcall::Rauth(v.clone()),
+            Fcall::Tversion(v) => Fcall::Tversion(Tversion {
+                msize: v.msize,
+                version: Cow::from(v.version.clone().into_owned()),
+            }),
+            Fcall::Rversion(v) => Fcall::Rversion(Rversion {
+                msize: v.msize,
+                version: Cow::from(v.version.clone().into_owned()),
+            }),
+            Fcall::Tflush(v) => Fcall::Tflush(v.clone()),
+            Fcall::Rflush(v) => Fcall::Rflush(v.clone()),
+            Fcall::Twalk(v) => Fcall::Twalk(Twalk {
+                fid: v.fid,
+                newfid: v.newfid,
+                wnames: v
+                    .wnames
+                    .iter()
+                    .map(|n| Cow::from(n.clone().into_owned()))
+                    .collect(),
+            }),
+            Fcall::Rwalk(v) => Fcall::Rwalk(v.clone()),
+            Fcall::Tread(v) => Fcall::Tread(v.clone()),
+            Fcall::Rread(v) => Fcall::Rread(Rread {
+                data: Cow::from(v.data.clone().into_owned()),
+            }),
+            Fcall::Twrite(v) => Fcall::Twrite(Twrite {
+                fid: v.fid,
+                offset: v.offset,
+                data: Cow::from(v.data.clone().into_owned()),
+            }),
+            Fcall::Rwrite(v) => Fcall::Rwrite(v.clone()),
+            Fcall::Tclunk(v) => Fcall::Tclunk(v.clone()),
+            Fcall::Rclunk(v) => Fcall::Rclunk(v.clone()),
+            Fcall::Tremove(v) => Fcall::Tremove(v.clone()),
+            Fcall::Rremove(v) => Fcall::Rremove(v.clone()),
+        }
+    }
+}
+
 impl<'a, 'b> From<&'a Fcall<'b>> for MsgType {
     fn from(fcall: &'a Fcall<'b>) -> MsgType {
         match *fcall {
@@ -1180,7 +1369,16 @@ pub struct Msg<'a> {
     pub body: Fcall<'a>,
 }
 
-pub fn read_msg<'a, R: Read>(r: &'a mut R, buf: &'a mut Vec<u8>) -> std::io::Result<Msg<'a>> {
+impl<'a> Msg<'a> {
+    pub fn clone_static(&self) -> Msg<'static> {
+        Msg {
+            tag: self.tag,
+            body: self.body.clone_static(),
+        }
+    }
+}
+
+pub fn read_msg<'a, R: Read>(r: &mut R, buf: &'a mut Vec<u8>) -> std::io::Result<Msg<'a>> {
     let mut sz = [0; 4];
     r.read_exact(&mut sz[..])?;
     let sz = u32::from_le_bytes(sz) as usize;
@@ -1641,9 +1839,9 @@ fn encode_rmkdir<W: Write>(w: &mut W, v: &Rmkdir) -> std::io::Result<()> {
     Ok(())
 }
 fn encode_trenameat<'a, W: Write>(w: &'a mut W, v: &Trenameat<'a>) -> std::io::Result<()> {
-    encode_u32(w, v.olddirfid)?;
+    encode_u32(w, v.olddfid)?;
     encode_str(w, &v.oldname)?;
-    encode_u32(w, v.newdirfid)?;
+    encode_u32(w, v.newdfid)?;
     encode_str(w, &v.newname)?;
     Ok(())
 }
@@ -1653,7 +1851,7 @@ fn encode_rrenameat<W: Write>(_w: &mut W, _v: &Rrenameat) -> std::io::Result<()>
 }
 
 fn encode_tunlinkat<'a, W: Write>(w: &'a mut W, v: &Tunlinkat<'a>) -> std::io::Result<()> {
-    encode_u32(w, v.dirfd)?;
+    encode_u32(w, v.dfid)?;
     encode_str(w, &v.name)?;
     encode_u32(w, v.flags)?;
     Ok(())
@@ -2288,9 +2486,9 @@ impl<'a, 'b: 'a> Decoder<'b> {
 
     fn decode_trenameat(&mut self) -> std::io::Result<Trenameat<'b>> {
         Ok(Trenameat {
-            olddirfid: self.decode_u32()?,
+            olddfid: self.decode_u32()?,
             oldname: self.decode_str()?,
-            newdirfid: self.decode_u32()?,
+            newdfid: self.decode_u32()?,
             newname: self.decode_str()?,
         })
     }
@@ -2301,7 +2499,7 @@ impl<'a, 'b: 'a> Decoder<'b> {
 
     fn decode_tunlinkat(&mut self) -> std::io::Result<Tunlinkat<'b>> {
         Ok(Tunlinkat {
-            dirfd: self.decode_u32()?,
+            dfid: self.decode_u32()?,
             name: self.decode_str()?,
             flags: self.decode_u32()?,
         })
