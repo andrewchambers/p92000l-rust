@@ -2,20 +2,70 @@ use super::fcall;
 use super::fcall::Fcall;
 use crossbeam_channel as channel;
 use std::borrow::Cow;
-use std::boxed::Box;
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
+struct Fidset {
+    set: HashSet<u32>,
+    next: u32,
+}
+
+impl Fidset {
+    fn new() -> Fidset {
+        Fidset {
+            set: HashSet::new(),
+            next: fcall::NOFID,
+        }
+    }
+
+    fn fresh(&mut self) -> Option<u32> {
+        if self.set.len() == (fcall::NOFID - 1) as usize {
+            return None;
+        }
+        loop {
+            if self.next == fcall::NOFID {
+                self.next = 0;
+            } else {
+                self.next += 1;
+            }
+            if !self.set.contains(&self.next) {
+                let fid = self.next;
+                self.set.insert(fid);
+                return Some(fid);
+            }
+        }
+    }
+
+    fn release(&mut self, fid: u32) {
+        self.set.remove(&fid);
+    }
+}
+
+struct DotlClientState {
+    read_worker_handle: Option<std::thread::JoinHandle<()>>,
+    dispatch_worker_handle: Option<std::thread::JoinHandle<()>>,
+    fids: Fidset,
+}
+
+impl Drop for DotlClientState {
+    fn drop(&mut self) {
+        if let Some(dispatch_worker_handle) = self.dispatch_worker_handle.take() {
+            let _ = dispatch_worker_handle.join();
+        }
+        if let Some(read_worker_handle) = self.read_worker_handle.take() {
+            let _ = read_worker_handle.join();
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct FcallRequest {
     fcall: Fcall<'static>,
     respond: channel::Sender<Fcall<'static>>,
-}
-
-#[derive(Clone)]
-pub struct DotlClient {
-    fcalls: channel::Sender<FcallRequest>,
 }
 
 struct InflightFcalls {
@@ -54,11 +104,35 @@ impl InflightFcalls {
     }
 }
 
+fn err_other(msg: &str) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, msg)
+}
+
+fn eio() -> std::io::Error {
+    err_other("io error")
+}
+
+fn eio_result<R, E>(_: E) -> Result<R, std::io::Error> {
+    Err(eio())
+}
+
+fn err_unexpected_response() -> std::io::Error {
+    err_other("unexpected response from server")
+}
+
+#[derive(Clone)]
+pub struct DotlClient {
+    // This is declared before state so that it
+    // is dropped first, thus letting threads exit.
+    requests: channel::Sender<FcallRequest>,
+    state: Arc<Mutex<DotlClientState>>,
+}
+
 impl DotlClient {
-    pub fn connect(
-        mut r: Box<dyn Read + Send>,
-        mut w: Box<dyn Write + Send>,
-    ) -> Result<DotlClient, std::io::Error> {
+    pub fn tcp(conn: TcpStream) -> Result<DotlClient, std::io::Error> {
+        let mut r = conn;
+        let mut w = r.try_clone()?;
+
         let mut bufsize: usize = 8192;
         let mut wbuf = Vec::with_capacity(bufsize);
         let mut rbuf = Vec::with_capacity(bufsize);
@@ -81,77 +155,121 @@ impl DotlClient {
                 body: Fcall::Rversion(fcall::Rversion { msize, version }),
             } => {
                 if version != fcall::P92000L {
-                    todo!();
+                    return Err(err_other("protocol negotiation failed"));
                 }
                 bufsize = bufsize.min(msize as usize);
             }
-            _ => todo!(),
+            _ => return Err(err_unexpected_response()),
         }
 
         wbuf.truncate(bufsize);
         rbuf.truncate(bufsize);
 
-        let (fcalls_tx, fcalls_rx) = channel::bounded(0);
+        let (requests_tx, requests_rx) = channel::bounded(0);
+        let (responses_tx, responses_rx) = channel::bounded(0);
 
-        let io_worker_handle = thread::spawn(move || {
-            DotlClient::io_worker(r, w, rbuf, wbuf, fcalls_rx);
+        let read_worker_handle = thread::spawn(move || {
+            DotlClient::read_worker(r, rbuf, responses_tx);
         });
 
-        Ok(DotlClient { fcalls: fcalls_tx })
+        let dispatch_worker_handle = thread::spawn(move || {
+            DotlClient::dispatch_worker(w, wbuf, requests_rx, responses_rx);
+        });
+
+        Ok(DotlClient {
+            state: Arc::new(Mutex::new(DotlClientState {
+                dispatch_worker_handle: Some(dispatch_worker_handle),
+                read_worker_handle: Some(read_worker_handle),
+                fids: Fidset::new(),
+            })),
+            requests: requests_tx,
+        })
     }
 
-    fn io_worker(
-        mut r: Box<dyn Read + Send>,
-        mut w: Box<dyn Write + Send>,
+    fn read_worker(
+        mut r: TcpStream,
         mut rbuf: Vec<u8>,
-        mut wbuf: Vec<u8>,
-        fcalls: channel::Receiver<FcallRequest>,
+        responses: channel::Sender<fcall::Msg<'static>>,
     ) {
-        let (response_tx, response_rx) = channel::bounded(0);
-
-        let remote_reader_worker = thread::spawn(move || loop {
+        loop {
             match fcall::read_msg(&mut r, &mut rbuf) {
                 Ok(msg) => {
-                    response_tx.send(msg.clone_static()).unwrap();
+                    if responses.send(msg.clone_static()).is_err() {
+                        return;
+                    };
                 }
-                Err(err) => panic!(),
-            };
-        });
+                Err(_) => return,
+            }
+        }
+    }
 
+    fn dispatch_worker(
+        mut w: TcpStream,
+        mut wbuf: Vec<u8>,
+        requests: channel::Receiver<FcallRequest>,
+        responses: channel::Receiver<fcall::Msg<'static>>,
+    ) {
         let mut in_flight = InflightFcalls::new();
 
-        loop {
+        'events: loop {
             channel::select! {
-                recv(response_rx) -> msg => {
-                    let msg = msg.unwrap();
-                    if let Some(listener) = in_flight.remove(msg.tag) {
-                        let _ = listener.send(msg.body);
+                recv(responses) -> msg => {
+                    match msg {
+                        Ok(msg) => {
+                            if let Some(respond_to) = in_flight.remove(msg.tag) {
+                                let _ = respond_to.send(msg.body);
+                            }
+                        }
+                        Err(_) => break 'events,
                     }
                 },
-                recv(fcalls) -> fcall => {
-                    let fcall = fcall.unwrap();
-                    let tag = in_flight.add(fcall.respond).unwrap();
-                    fcall::write_msg(&mut w, &mut wbuf,  &fcall::Msg {
-                        tag,
-                        body: fcall.fcall,
-                    }).unwrap();
+                recv(requests) -> request => {
+                    match request {
+                        Ok(request) => if let Some(tag) = in_flight.add(request.respond) {
+                            if fcall::write_msg(&mut w, &mut wbuf,  &fcall::Msg {
+                                tag,
+                                body: request.fcall,
+                            }).is_err() {
+                                break 'events;
+                            };
+                        }
+                        Err(_) => break 'events,
+                    }
                 },
             }
         }
 
-        remote_reader_worker.join().unwrap();
+        // Cancel in flight requests immediately.
+        drop(in_flight);
+        // Ensure io worker will exit.
+        drop(responses);
+        // Disconnect from remote.
+        let _ = w.shutdown(std::net::Shutdown::Write);
     }
 
-    fn attach(
+    fn fresh_fid(&self) -> Option<u32> {
+        self.state.lock().unwrap().fids.fresh()
+    }
+
+    fn release_fid(&self, fid: u32) {
+        self.state.lock().unwrap().fids.release(fid)
+    }
+
+    pub fn attach(
         &self,
-        afid: u32,
-        fid: u32,
         n_uname: u32,
         uname: &str,
         aname: &str,
     ) -> Result<DotlFile, std::io::Error> {
         let (tx, rx) = channel::bounded(1);
-        self.fcalls
+
+        let afid = fcall::NOFID;
+        let fid = match self.fresh_fid() {
+            Some(fid) => fid,
+            None => return Err(eio()),
+        };
+
+        self.requests
             .send(FcallRequest {
                 fcall: Fcall::Tattach(fcall::Tattach {
                     afid,
@@ -162,40 +280,40 @@ impl DotlClient {
                 }),
                 respond: tx,
             })
-            .unwrap();
-        match rx.recv().unwrap() {
+            .or_else(eio_result)?;
+        match rx.recv().or_else(eio_result)? {
             Fcall::Rattach(fcall::Rattach { qid }) => Ok(DotlFile {
                 qid,
                 fid,
                 offset: 0,
                 client: self.clone(),
             }),
-            _ => todo!(),
+            _ => Err(err_unexpected_response()),
         }
     }
 
     fn read(&self, fid: u32, offset: u64, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         let count = buf.len().min(u32::MAX as usize) as u32;
         let (tx, rx) = channel::bounded(1);
-        self.fcalls
+        self.requests
             .send(FcallRequest {
                 fcall: Fcall::Tread(fcall::Tread { fid, offset, count }),
                 respond: tx,
             })
-            .unwrap();
-        match rx.recv().unwrap() {
+            .or_else(eio_result)?;
+        match rx.recv().or_else(eio_result)? {
             Fcall::Rread(fcall::Rread { data }) => {
                 buf.copy_from_slice(&data[..]);
                 Ok(data.len())
             }
-            _ => todo!(),
+            _ => Err(err_unexpected_response()),
         }
     }
 
     fn write(&self, fid: u32, offset: u64, buf: &[u8]) -> Result<usize, std::io::Error> {
         let count = buf.len().min(u32::MAX as usize);
         let (tx, rx) = channel::bounded(1);
-        self.fcalls
+        self.requests
             .send(FcallRequest {
                 fcall: Fcall::Twrite(fcall::Twrite {
                     fid,
@@ -204,51 +322,55 @@ impl DotlClient {
                 }),
                 respond: tx,
             })
-            .unwrap();
-        match rx.recv().unwrap() {
+            .or_else(eio_result)?;
+
+        match rx.recv().or_else(eio_result)? {
             Fcall::Rwrite(fcall::Rwrite { count }) => Ok(count as usize),
-            _ => todo!(),
+            _ => Err(err_unexpected_response()),
         }
     }
 
     fn fsync(&self, fid: u32) -> Result<(), std::io::Error> {
         let (tx, rx) = channel::bounded(1);
-        self.fcalls
+        self.requests
             .send(FcallRequest {
                 fcall: Fcall::Tfsync(fcall::Tfsync { fid }),
                 respond: tx,
             })
-            .unwrap();
-        match rx.recv().unwrap() {
+            .or_else(eio_result)?;
+        match rx.recv().or_else(eio_result)? {
             Fcall::Rfsync { .. } => Ok(()),
-            _ => todo!(),
+            _ => Err(err_unexpected_response()),
         }
     }
 
     fn clunk(&self, fid: u32) -> Result<(), std::io::Error> {
         let (tx, rx) = channel::bounded(1);
-        self.fcalls
+        self.requests
             .send(FcallRequest {
                 fcall: Fcall::Tclunk(fcall::Tclunk { fid }),
                 respond: tx,
             })
-            .unwrap();
-        match rx.recv().unwrap() {
-            Fcall::Rclunk { .. } => Ok(()),
-            _ => todo!(),
+            .or_else(eio_result)?;
+        match rx.recv().or_else(eio_result)? {
+            Fcall::Rclunk { .. } => {
+                self.release_fid(fid);
+                Ok(())
+            }
+            _ => Err(err_unexpected_response()),
         }
     }
 }
 
 pub struct DotlFile {
     client: DotlClient,
-    offset: u64,
     qid: fcall::Qid,
+    offset: u64,
     fid: u32,
 }
 
 impl DotlFile {
-    fn close(self) -> Result<(), std::io::Error> {
+    pub fn close(self) -> Result<(), std::io::Error> {
         self.client.clunk(self.fid)
     }
 }

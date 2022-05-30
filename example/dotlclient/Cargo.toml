@@ -1,0 +1,18 @@
+[package]
+name = "dotlclient"
+version = "0.0.1"
+authors = [ "andrewchambers <ac@acha.ninja>" ]
+edition = "2021"
+
+[[bin]]
+name = "dotlclient"
+
+[dependencies]
+nix = "*"
+
+[dependencies.p92000]
+path = "../../"
+
+[profile.release]
+opt-level = 3
+lto = true
