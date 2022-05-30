@@ -1,4 +1,4 @@
 pub mod client;
-pub mod errno;
 pub mod fcall;
+pub mod lerrno;
 pub mod server;

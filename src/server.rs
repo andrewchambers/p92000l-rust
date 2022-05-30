@@ -1,6 +1,6 @@
-use super::errno::*;
 use super::fcall;
 use super::fcall::*;
+use super::lerrno;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -9,11 +9,15 @@ pub trait DotlFilesystem {
     type Fid;
 
     fn statfs(&self, _: &mut Self::Fid) -> Result<Rstatfs, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn lopen(&self, _: &mut Self::Fid, _flags: u32) -> Result<Rlopen, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn lcreate(
@@ -24,7 +28,9 @@ pub trait DotlFilesystem {
         _mode: u32,
         _gid: u32,
     ) -> Result<Rlcreate, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn symlink(
@@ -34,7 +40,9 @@ pub trait DotlFilesystem {
         _sym: &str,
         _gid: u32,
     ) -> Result<Rsymlink, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn mknod(
@@ -46,7 +54,9 @@ pub trait DotlFilesystem {
         _minor: u32,
         _gid: u32,
     ) -> Result<Rmknod, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn rename(
@@ -55,15 +65,21 @@ pub trait DotlFilesystem {
         _: &mut Self::Fid,
         _name: &str,
     ) -> Result<Rrename, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn readlink(&self, _: &mut Self::Fid) -> Result<Rreadlink<'static>, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn getattr(&self, _: &mut Self::Fid, _req_mask: GetattrMask) -> Result<Rgetattr, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn setattr(
@@ -72,7 +88,9 @@ pub trait DotlFilesystem {
         _valid: SetattrMask,
         _stat: &SetAttr,
     ) -> Result<Rsetattr, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn xattrwalk(
@@ -81,7 +99,9 @@ pub trait DotlFilesystem {
         _: &mut Self::Fid,
         _name: &str,
     ) -> Result<Rxattrwalk, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn xattrcreate(
@@ -91,7 +111,9 @@ pub trait DotlFilesystem {
         _attr_size: u64,
         _flags: u32,
     ) -> Result<Rxattrcreate, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn readdir(
@@ -100,23 +122,33 @@ pub trait DotlFilesystem {
         _offset: u64,
         _count: u32,
     ) -> Result<Rreaddir<'static>, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn fsync(&self, _: &mut Self::Fid) -> Result<Rfsync, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn lock(&self, _: &mut Self::Fid, _lock: &Flock) -> Result<Rlock, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn getlock(&self, _: &mut Self::Fid, _lock: &Getlock) -> Result<Rgetlock<'static>, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn link(&self, _: &mut Self::Fid, _: &mut Self::Fid, _name: &str) -> Result<Rlink, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn mkdir(
@@ -126,7 +158,9 @@ pub trait DotlFilesystem {
         _mode: u32,
         _gid: u32,
     ) -> Result<Rmkdir, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn renameat(
@@ -136,11 +170,15 @@ pub trait DotlFilesystem {
         _: &mut Self::Fid,
         _newname: &str,
     ) -> Result<Rrenameat, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn unlinkat(&self, _: &mut Self::Fid, _name: &str, _flags: u32) -> Result<Runlinkat, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn auth(
@@ -149,7 +187,9 @@ pub trait DotlFilesystem {
         _aname: &str,
         _n_uname: u32,
     ) -> Result<(Self::Fid, Rauth), Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn attach(
@@ -159,7 +199,9 @@ pub trait DotlFilesystem {
         _aname: &str,
         _n_uname: u32,
     ) -> Result<(Self::Fid, Rattach), Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn flush(&self) -> Result<Rflush, Rlerror> {
@@ -171,15 +213,21 @@ pub trait DotlFilesystem {
         _: &mut Self::Fid,
         _wnames: &[Cow<'_, str>],
     ) -> Result<(Option<Self::Fid>, Rwalk), Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn read(&self, _: &mut Self::Fid, _offset: u64, _buf: &mut [u8]) -> Result<usize, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn write(&self, _: &mut Self::Fid, _offset: u64, _data: &[u8]) -> Result<Rwrite, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn clunk(&self, _: &mut Self::Fid) -> Result<Rclunk, Rlerror> {
@@ -187,7 +235,9 @@ pub trait DotlFilesystem {
     }
 
     fn remove(&self, _: &mut Self::Fid) -> Result<Rremove, Rlerror> {
-        Err(Rlerror { ecode: EOPNOTSUPP })
+        Err(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
     }
 
     fn version(&self, msize: u32, ver: &str) -> Rversion<'static> {
@@ -253,7 +303,9 @@ where
             ($ident:ident, $e:expr) => {
                 match fids.get_mut(&$ident) {
                     Some($ident) => $e,
-                    None => Fcall::Rlerror(Rlerror { ecode: EBADF }),
+                    None => Fcall::Rlerror(Rlerror {
+                        ecode: lerrno::EBADF,
+                    }),
                 }
             };
         }
@@ -269,10 +321,14 @@ where
                         $e
                     } else {
                         fids.insert(f1, $f1);
-                        Fcall::Rlerror(Rlerror { ecode: EBADF })
+                        Fcall::Rlerror(Rlerror {
+                            ecode: lerrno::EBADF,
+                        })
                     }
                 } else {
-                    Fcall::Rlerror(Rlerror { ecode: EBADF })
+                    Fcall::Rlerror(Rlerror {
+                        ecode: lerrno::EBADF,
+                    })
                 }
             }};
         }
@@ -353,7 +409,9 @@ where
                             Err(rlerror) => rlerror.into(),
                         }
                     }
-                    None => Fcall::Rlerror(fcall::Rlerror { ecode: EBADF }),
+                    None => Fcall::Rlerror(fcall::Rlerror {
+                        ecode: lerrno::EBADF,
+                    }),
                 }
             }
             Fcall::Twrite(Twrite {
@@ -449,9 +507,13 @@ where
                     }
                     Err(rlerror) => rlerror.into(),
                 },
-                None => Fcall::Rlerror(fcall::Rlerror { ecode: EBADF }),
+                None => Fcall::Rlerror(fcall::Rlerror {
+                    ecode: lerrno::EBADF,
+                }),
             },
-            _ => Fcall::Rlerror(fcall::Rlerror { ecode: EOPNOTSUPP }),
+            _ => Fcall::Rlerror(fcall::Rlerror {
+                ecode: lerrno::EOPNOTSUPP,
+            }),
         };
 
         let tagged_resp = fcall::TaggedFcall {

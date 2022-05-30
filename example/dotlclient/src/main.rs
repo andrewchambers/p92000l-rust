@@ -4,15 +4,15 @@ use std::net::TcpStream;
 
 fn main() {
     let conn = TcpStream::connect("127.0.0.1:5030").unwrap();
-    let client = client::DotlClient::tcp(conn).unwrap();
+    let client = client::DotlClient::tcp(conn, 8912).unwrap();
 
     let mut f = client.attach(0, "ac", "/tmp").unwrap();
 
-    let _ = f.write(&[1, 2, 3]);
+    f.open(0).unwrap();
 
-    println!("dropping client...");
-    drop(client);
-    println!("dropping file...");
-    drop(f);
+    dbg!(f.read_dir().unwrap());
+
+    f.close().unwrap();
+
     println!("good bye!");
 }

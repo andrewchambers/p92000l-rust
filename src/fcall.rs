@@ -32,9 +32,6 @@ pub const IOHDRSZ: u32 = 24;
 /// Room for readdir header
 pub const READDIRHDRSZ: u32 = 24;
 
-/// v9fs default port
-pub const V9FS_PORT: u16 = 564;
-
 bitflags! {
     /// File lock type, Flock.typ
     pub struct LockType: u8 {
@@ -218,12 +215,6 @@ impl<'a> From<&'a fs::Metadata> for Stat {
     }
 }
 
-impl<'a> DirEntry<'a> {
-    pub fn size(&self) -> u32 {
-        (13 + 8 + 1 + 2 + self.name.len()) as u32
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct DirEntryData<'a> {
     pub data: Vec<DirEntry<'a>>,
@@ -332,35 +323,6 @@ enum_from_primitive! {
     }
 }
 
-impl From<std::io::Error> for Rlerror {
-    fn from(err: std::io::Error) -> Self {
-        use super::errno::*;
-        use std::io::ErrorKind::*;
-
-        let ecode = match err.kind() {
-            NotFound => ENOENT,
-            PermissionDenied => EPERM,
-            ConnectionRefused => ECONNREFUSED,
-            ConnectionReset => ECONNRESET,
-            ConnectionAborted => ECONNABORTED,
-            NotConnected => ENOTCONN,
-            AddrInUse => EADDRINUSE,
-            AddrNotAvailable => EADDRNOTAVAIL,
-            BrokenPipe => EPIPE,
-            AlreadyExists => EALREADY,
-            WouldBlock => EAGAIN,
-            InvalidInput => EINVAL,
-            InvalidData => EINVAL,
-            TimedOut => ETIMEDOUT,
-            WriteZero => EAGAIN,
-            Interrupted => EINTR,
-            _ => EIO,
-        };
-
-        Rlerror { ecode }
-    }
-}
-
 #[derive(Clone, Debug, Copy)]
 pub struct Qid {
     pub typ: QidType,
@@ -418,6 +380,12 @@ pub struct DirEntry<'a> {
     pub name: Cow<'a, str>,
 }
 
+impl<'a> DirEntry<'a> {
+    pub fn size(&self) -> u32 {
+        (13 + 8 + 1 + 2 + self.name.len()) as u32
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Flock<'a> {
     pub typ: LockType,
@@ -440,6 +408,60 @@ pub struct Getlock<'a> {
 #[derive(Clone, Debug)]
 pub struct Rlerror {
     pub ecode: u32,
+}
+
+impl Rlerror {
+    pub fn into_io_error(self) -> std::io::Error {
+        use super::lerrno::*;
+        use std::io::Error;
+        use std::io::ErrorKind::*;
+
+        match self.ecode {
+            ENOENT => Error::from(NotFound),
+            EPERM => Error::from(PermissionDenied),
+            ECONNREFUSED => Error::from(ConnectionRefused),
+            ECONNRESET => Error::from(ConnectionReset),
+            ECONNABORTED => Error::from(ConnectionAborted),
+            ENOTCONN => Error::from(NotConnected),
+            EADDRINUSE => Error::from(AddrInUse),
+            EADDRNOTAVAIL => Error::from(AddrNotAvailable),
+            EPIPE => Error::from(BrokenPipe),
+            EALREADY => Error::from(AlreadyExists),
+            EINVAL => Error::from(InvalidInput),
+            ETIMEDOUT => Error::from(TimedOut),
+            EINTR => Error::from(Interrupted),
+            ecode => Error::new(Other, strerror(ecode)),
+        }
+    }
+}
+
+impl From<std::io::Error> for Rlerror {
+    fn from(err: std::io::Error) -> Self {
+        use super::lerrno::*;
+        use std::io::ErrorKind::*;
+
+        let ecode = match err.kind() {
+            NotFound => ENOENT,
+            PermissionDenied => EPERM,
+            ConnectionRefused => ECONNREFUSED,
+            ConnectionReset => ECONNRESET,
+            ConnectionAborted => ECONNABORTED,
+            NotConnected => ENOTCONN,
+            AddrInUse => EADDRINUSE,
+            AddrNotAvailable => EADDRNOTAVAIL,
+            BrokenPipe => EPIPE,
+            AlreadyExists => EALREADY,
+            WouldBlock => EAGAIN,
+            InvalidInput => EINVAL,
+            InvalidData => EINVAL,
+            TimedOut => ETIMEDOUT,
+            WriteZero => EAGAIN,
+            Interrupted => EINTR,
+            _ => EIO,
+        };
+
+        Rlerror { ecode }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1419,7 +1441,7 @@ pub fn write<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &TaggedFcall) -> std::
             w.write_all(&data[..])?;
             Ok(())
         }
-        /* TODO, Zero copy Twrite path, mostly for client.
+        /* XXX Zero copy Twrite path.
         TaggedFcall {
             tag,
             fcall: Fcall::Twrite(Twrite { ref data }),
@@ -2112,9 +2134,10 @@ impl<'a, 'b: 'a> Decoder<'b> {
     }
 
     fn decode_direntrydata(&mut self) -> std::io::Result<DirEntryData<'b>> {
-        let len = self.decode_u16()?;
+        let start_len = self.buf.len();
+        let end_len = self.buf.len() - self.decode_u32()? as usize;
         let mut v = Vec::new();
-        for _ in 0..len {
+        while self.buf.len() > end_len {
             v.push(self.decode_direntry()?);
         }
         Ok(DirEntryData::with(v))
