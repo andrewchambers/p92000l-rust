@@ -43,7 +43,6 @@ impl InflightFcalls {
             }
             if !self.map.contains_key(&self.next) {
                 let tag = self.next;
-                self.next += 1;
                 self.map.insert(tag, respond_to);
                 return Some(tag);
             }
