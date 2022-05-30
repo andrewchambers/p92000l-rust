@@ -257,7 +257,7 @@ impl<'b> Default for DirEntryData<'b> {
 enum_from_primitive! {
     #[doc = "Message type, 9P operations"]
     #[derive(Copy, Clone, Debug)]
-    pub enum MsgType {
+    pub enum FcallType {
         // 9P2000.L
         Tlerror         = 6,    // Illegal, never used
         Rlerror,
@@ -1290,66 +1290,66 @@ impl<'a> Fcall<'a> {
     }
 }
 
-impl<'a, 'b> From<&'a Fcall<'b>> for MsgType {
-    fn from(fcall: &'a Fcall<'b>) -> MsgType {
+impl<'a, 'b> From<&'a Fcall<'b>> for FcallType {
+    fn from(fcall: &'a Fcall<'b>) -> FcallType {
         match *fcall {
-            Fcall::Rlerror(_) => MsgType::Rlerror,
-            Fcall::Tattach(_) => MsgType::Tattach,
-            Fcall::Rattach(_) => MsgType::Rattach,
-            Fcall::Tstatfs(_) => MsgType::Tstatfs,
-            Fcall::Rstatfs(_) => MsgType::Rstatfs,
-            Fcall::Tlopen(_) => MsgType::Tlopen,
-            Fcall::Rlopen(_) => MsgType::Rlopen,
-            Fcall::Tlcreate(_) => MsgType::Tlcreate,
-            Fcall::Rlcreate(_) => MsgType::Rlcreate,
-            Fcall::Tsymlink(_) => MsgType::Tsymlink,
-            Fcall::Rsymlink(_) => MsgType::Rsymlink,
-            Fcall::Tmknod(_) => MsgType::Tmknod,
-            Fcall::Rmknod(_) => MsgType::Rmknod,
-            Fcall::Trename(_) => MsgType::Trename,
-            Fcall::Rrename(_) => MsgType::Rrename,
-            Fcall::Treadlink(_) => MsgType::Treadlink,
-            Fcall::Rreadlink(_) => MsgType::Rreadlink,
-            Fcall::Tgetattr(_) => MsgType::Tgetattr,
-            Fcall::Rgetattr(_) => MsgType::Rgetattr,
-            Fcall::Tsetattr(_) => MsgType::Tsetattr,
-            Fcall::Rsetattr(_) => MsgType::Rsetattr,
-            Fcall::Txattrwalk(_) => MsgType::Txattrwalk,
-            Fcall::Rxattrwalk(_) => MsgType::Rxattrwalk,
-            Fcall::Txattrcreate(_) => MsgType::Txattrcreate,
-            Fcall::Rxattrcreate(_) => MsgType::Rxattrcreate,
-            Fcall::Treaddir(_) => MsgType::Treaddir,
-            Fcall::Rreaddir(_) => MsgType::Rreaddir,
-            Fcall::Tfsync(_) => MsgType::Tfsync,
-            Fcall::Rfsync(_) => MsgType::Rfsync,
-            Fcall::Tlock(_) => MsgType::Tlock,
-            Fcall::Rlock(_) => MsgType::Rlock,
-            Fcall::Tgetlock(_) => MsgType::Tgetlock,
-            Fcall::Rgetlock(_) => MsgType::Rgetlock,
-            Fcall::Tlink(_) => MsgType::Tlink,
-            Fcall::Rlink(_) => MsgType::Rlink,
-            Fcall::Tmkdir(_) => MsgType::Tmkdir,
-            Fcall::Rmkdir(_) => MsgType::Rmkdir,
-            Fcall::Trenameat(_) => MsgType::Trenameat,
-            Fcall::Rrenameat(_) => MsgType::Rrenameat,
-            Fcall::Tunlinkat(_) => MsgType::Tunlinkat,
-            Fcall::Runlinkat(_) => MsgType::Runlinkat,
-            Fcall::Tauth(_) => MsgType::Tauth,
-            Fcall::Rauth(_) => MsgType::Rauth,
-            Fcall::Tversion(_) => MsgType::Tversion,
-            Fcall::Rversion(_) => MsgType::Rversion,
-            Fcall::Tflush(_) => MsgType::Tflush,
-            Fcall::Rflush(_) => MsgType::Rflush,
-            Fcall::Twalk(_) => MsgType::Twalk,
-            Fcall::Rwalk(_) => MsgType::Rwalk,
-            Fcall::Tread(_) => MsgType::Tread,
-            Fcall::Rread(_) => MsgType::Rread,
-            Fcall::Twrite(_) => MsgType::Twrite,
-            Fcall::Rwrite(_) => MsgType::Rwrite,
-            Fcall::Tclunk(_) => MsgType::Tclunk,
-            Fcall::Rclunk(_) => MsgType::Rclunk,
-            Fcall::Tremove(_) => MsgType::Tremove,
-            Fcall::Rremove(_) => MsgType::Rremove,
+            Fcall::Rlerror(_) => FcallType::Rlerror,
+            Fcall::Tattach(_) => FcallType::Tattach,
+            Fcall::Rattach(_) => FcallType::Rattach,
+            Fcall::Tstatfs(_) => FcallType::Tstatfs,
+            Fcall::Rstatfs(_) => FcallType::Rstatfs,
+            Fcall::Tlopen(_) => FcallType::Tlopen,
+            Fcall::Rlopen(_) => FcallType::Rlopen,
+            Fcall::Tlcreate(_) => FcallType::Tlcreate,
+            Fcall::Rlcreate(_) => FcallType::Rlcreate,
+            Fcall::Tsymlink(_) => FcallType::Tsymlink,
+            Fcall::Rsymlink(_) => FcallType::Rsymlink,
+            Fcall::Tmknod(_) => FcallType::Tmknod,
+            Fcall::Rmknod(_) => FcallType::Rmknod,
+            Fcall::Trename(_) => FcallType::Trename,
+            Fcall::Rrename(_) => FcallType::Rrename,
+            Fcall::Treadlink(_) => FcallType::Treadlink,
+            Fcall::Rreadlink(_) => FcallType::Rreadlink,
+            Fcall::Tgetattr(_) => FcallType::Tgetattr,
+            Fcall::Rgetattr(_) => FcallType::Rgetattr,
+            Fcall::Tsetattr(_) => FcallType::Tsetattr,
+            Fcall::Rsetattr(_) => FcallType::Rsetattr,
+            Fcall::Txattrwalk(_) => FcallType::Txattrwalk,
+            Fcall::Rxattrwalk(_) => FcallType::Rxattrwalk,
+            Fcall::Txattrcreate(_) => FcallType::Txattrcreate,
+            Fcall::Rxattrcreate(_) => FcallType::Rxattrcreate,
+            Fcall::Treaddir(_) => FcallType::Treaddir,
+            Fcall::Rreaddir(_) => FcallType::Rreaddir,
+            Fcall::Tfsync(_) => FcallType::Tfsync,
+            Fcall::Rfsync(_) => FcallType::Rfsync,
+            Fcall::Tlock(_) => FcallType::Tlock,
+            Fcall::Rlock(_) => FcallType::Rlock,
+            Fcall::Tgetlock(_) => FcallType::Tgetlock,
+            Fcall::Rgetlock(_) => FcallType::Rgetlock,
+            Fcall::Tlink(_) => FcallType::Tlink,
+            Fcall::Rlink(_) => FcallType::Rlink,
+            Fcall::Tmkdir(_) => FcallType::Tmkdir,
+            Fcall::Rmkdir(_) => FcallType::Rmkdir,
+            Fcall::Trenameat(_) => FcallType::Trenameat,
+            Fcall::Rrenameat(_) => FcallType::Rrenameat,
+            Fcall::Tunlinkat(_) => FcallType::Tunlinkat,
+            Fcall::Runlinkat(_) => FcallType::Runlinkat,
+            Fcall::Tauth(_) => FcallType::Tauth,
+            Fcall::Rauth(_) => FcallType::Rauth,
+            Fcall::Tversion(_) => FcallType::Tversion,
+            Fcall::Rversion(_) => FcallType::Rversion,
+            Fcall::Tflush(_) => FcallType::Tflush,
+            Fcall::Rflush(_) => FcallType::Rflush,
+            Fcall::Twalk(_) => FcallType::Twalk,
+            Fcall::Rwalk(_) => FcallType::Rwalk,
+            Fcall::Tread(_) => FcallType::Tread,
+            Fcall::Rread(_) => FcallType::Rread,
+            Fcall::Twrite(_) => FcallType::Twrite,
+            Fcall::Rwrite(_) => FcallType::Rwrite,
+            Fcall::Tclunk(_) => FcallType::Tclunk,
+            Fcall::Rclunk(_) => FcallType::Rclunk,
+            Fcall::Tremove(_) => FcallType::Tremove,
+            Fcall::Rremove(_) => FcallType::Rremove,
         }
     }
 }
@@ -1364,21 +1364,21 @@ impl<'a, A: Into<Fcall<'a>>, B: Into<Fcall<'a>>> From<Result<A, B>> for Fcall<'a
 }
 
 #[derive(Clone, Debug)]
-pub struct Msg<'a> {
+pub struct TaggedFcall<'a> {
     pub tag: u16,
-    pub body: Fcall<'a>,
+    pub fcall: Fcall<'a>,
 }
 
-impl<'a> Msg<'a> {
-    pub fn clone_static(&self) -> Msg<'static> {
-        Msg {
+impl<'a> TaggedFcall<'a> {
+    pub fn clone_static(&self) -> TaggedFcall<'static> {
+        TaggedFcall {
             tag: self.tag,
-            body: self.body.clone_static(),
+            fcall: self.fcall.clone_static(),
         }
     }
 }
 
-pub fn read_msg<'a, R: Read>(r: &mut R, buf: &'a mut Vec<u8>) -> std::io::Result<Msg<'a>> {
+pub fn read<'a, R: Read>(r: &mut R, buf: &'a mut Vec<u8>) -> std::io::Result<TaggedFcall<'a>> {
     let mut sz = [0; 4];
     r.read_exact(&mut sz[..])?;
     let sz = u32::from_le_bytes(sz) as usize;
@@ -1391,15 +1391,15 @@ pub fn read_msg<'a, R: Read>(r: &mut R, buf: &'a mut Vec<u8>) -> std::io::Result
     let sz = sz - 4;
     buf.resize(sz, 0);
     r.read_exact(&mut buf[..])?;
-    decode_msg(buf)
+    decode(buf)
 }
 
-pub fn write_msg<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &Msg) -> std::io::Result<()> {
+pub fn write<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &TaggedFcall) -> std::io::Result<()> {
     buf.truncate(0);
     match msg {
-        Msg {
+        TaggedFcall {
             tag,
-            body: Fcall::Rread(Rread { ref data }),
+            fcall: Fcall::Rread(Rread { ref data }),
         } => {
             // Zero copy Rread path.
             let sz = 4 + 1 + 2 + 4 + data.len();
@@ -1420,16 +1420,16 @@ pub fn write_msg<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &Msg) -> std::io::
             Ok(())
         }
         /* TODO, Zero copy Twrite path, mostly for client.
-        Msg {
+        TaggedFcall {
             tag,
-            body: Fcall::Twrite(Twrite { ref data }),
+            fcall: Fcall::Twrite(Twrite { ref data }),
         } => {
         }
         */
         msg => {
             // Slow path, encode the whole message to the buffer then write it.
             let mut cursor = std::io::Cursor::new(buf);
-            encode_msg(&mut cursor, msg)?;
+            encode(&mut cursor, msg)?;
             let buf = cursor.into_inner();
             // XXX vectored write or single write here?
             let sz_bytes = &((buf.len() + 4) as u32).to_le_bytes()[..];
@@ -1948,11 +1948,11 @@ fn encode_rremove<W: Write>(_w: &mut W, _v: &Rremove) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn encode_msg<W: Write>(w: &mut W, v: &Msg) -> std::io::Result<()> {
-    let typ = MsgType::from(&v.body);
+pub fn encode<W: Write>(w: &mut W, v: &TaggedFcall) -> std::io::Result<()> {
+    let typ = FcallType::from(&v.fcall);
     encode_u8(w, typ as u8)?;
     encode_u16(w, v.tag)?;
-    match v.body {
+    match v.fcall {
         Fcall::Rlerror(ref v) => encode_rlerror(w, v)?,
         Fcall::Tattach(ref v) => encode_tattach(w, v)?,
         Fcall::Rattach(ref v) => encode_rattach(w, v)?,
@@ -2018,9 +2018,9 @@ struct Decoder<'b> {
     buf: &'b [u8],
 }
 
-pub fn decode_msg(buf: &[u8]) -> std::io::Result<Msg> {
+pub fn decode(buf: &[u8]) -> std::io::Result<TaggedFcall> {
     let mut d = Decoder { buf };
-    d.decode_msg()
+    d.decode()
 }
 
 fn invalid_9p_msg() -> std::io::Error {
@@ -2610,69 +2610,69 @@ impl<'a, 'b: 'a> Decoder<'b> {
         Ok(Rremove {})
     }
 
-    fn decode_msg(&mut self) -> std::io::Result<Msg<'b>> {
-        let msg_type = MsgType::from_u8(self.decode_u8()?);
+    fn decode(&mut self) -> std::io::Result<TaggedFcall<'b>> {
+        let msg_type = FcallType::from_u8(self.decode_u8()?);
         let tag = self.decode_u16()?;
-        let body = match msg_type {
-            Some(MsgType::Rlerror) => Fcall::Rlerror(self.decode_rlerror()?),
-            Some(MsgType::Tattach) => Fcall::Tattach(self.decode_tattach()?),
-            Some(MsgType::Rattach) => Fcall::Rattach(self.decode_rattach()?),
-            Some(MsgType::Tstatfs) => Fcall::Tstatfs(self.decode_tstatfs()?),
-            Some(MsgType::Rstatfs) => Fcall::Rstatfs(self.decode_rstatfs()?),
-            Some(MsgType::Tlopen) => Fcall::Tlopen(self.decode_tlopen()?),
-            Some(MsgType::Rlopen) => Fcall::Rlopen(self.decode_rlopen()?),
-            Some(MsgType::Tlcreate) => Fcall::Tlcreate(self.decode_tlcreate()?),
-            Some(MsgType::Rlcreate) => Fcall::Rlcreate(self.decode_rlcreate()?),
-            Some(MsgType::Tsymlink) => Fcall::Tsymlink(self.decode_tsymlink()?),
-            Some(MsgType::Rsymlink) => Fcall::Rsymlink(self.decode_rsymlink()?),
-            Some(MsgType::Tmknod) => Fcall::Tmknod(self.decode_tmknod()?),
-            Some(MsgType::Rmknod) => Fcall::Rmknod(self.decode_rmknod()?),
-            Some(MsgType::Trename) => Fcall::Trename(self.decode_trename()?),
-            Some(MsgType::Rrename) => Fcall::Rrename(self.decode_rrename()?),
-            Some(MsgType::Treadlink) => Fcall::Treadlink(self.decode_treadlink()?),
-            Some(MsgType::Rreadlink) => Fcall::Rreadlink(self.decode_rreadlink()?),
-            Some(MsgType::Tgetattr) => Fcall::Tgetattr(self.decode_tgetattr()?),
-            Some(MsgType::Rgetattr) => Fcall::Rgetattr(self.decode_rgetattr()?),
-            Some(MsgType::Tsetattr) => Fcall::Tsetattr(self.decode_tsetattr()?),
-            Some(MsgType::Rsetattr) => Fcall::Rsetattr(self.decode_rsetattr()?),
-            Some(MsgType::Txattrwalk) => Fcall::Txattrwalk(self.decode_txattrwalk()?),
-            Some(MsgType::Rxattrwalk) => Fcall::Rxattrwalk(self.decode_rxattrwalk()?),
-            Some(MsgType::Txattrcreate) => Fcall::Txattrcreate(self.decode_txattrcreate()?),
-            Some(MsgType::Rxattrcreate) => Fcall::Rxattrcreate(self.decode_rxattrcreate()?),
-            Some(MsgType::Treaddir) => Fcall::Treaddir(self.decode_treaddir()?),
-            Some(MsgType::Rreaddir) => Fcall::Rreaddir(self.decode_rreaddir()?),
-            Some(MsgType::Tfsync) => Fcall::Tfsync(self.decode_tfsync()?),
-            Some(MsgType::Rfsync) => Fcall::Rfsync(self.decode_rfsync()?),
-            Some(MsgType::Tlock) => Fcall::Tlock(self.decode_tlock()?),
-            Some(MsgType::Rlock) => Fcall::Rlock(self.decode_rlock()?),
-            Some(MsgType::Tgetlock) => Fcall::Tgetlock(self.decode_tgetlock()?),
-            Some(MsgType::Rgetlock) => Fcall::Rgetlock(self.decode_rgetlock()?),
-            Some(MsgType::Tlink) => Fcall::Tlink(self.decode_tlink()?),
-            Some(MsgType::Rlink) => Fcall::Rlink(self.decode_rlink()?),
-            Some(MsgType::Tmkdir) => Fcall::Tmkdir(self.decode_tmkdir()?),
-            Some(MsgType::Rmkdir) => Fcall::Rmkdir(self.decode_rmkdir()?),
-            Some(MsgType::Trenameat) => Fcall::Trenameat(self.decode_trenameat()?),
-            Some(MsgType::Rrenameat) => Fcall::Rrenameat(self.decode_rrenameat()?),
-            Some(MsgType::Tunlinkat) => Fcall::Tunlinkat(self.decode_tunlinkat()?),
-            Some(MsgType::Runlinkat) => Fcall::Runlinkat(self.decode_runlinkat()?),
-            Some(MsgType::Tauth) => Fcall::Tauth(self.decode_tauth()?),
-            Some(MsgType::Rauth) => Fcall::Rauth(self.decode_rauth()?),
-            Some(MsgType::Tversion) => Fcall::Tversion(self.decode_tversion()?),
-            Some(MsgType::Rversion) => Fcall::Rversion(self.decode_rversion()?),
-            Some(MsgType::Tflush) => Fcall::Tflush(self.decode_tflush()?),
-            Some(MsgType::Rflush) => Fcall::Rflush(self.decode_rflush()?),
-            Some(MsgType::Twalk) => Fcall::Twalk(self.decode_twalk()?),
-            Some(MsgType::Rwalk) => Fcall::Rwalk(self.decode_rwalk()?),
-            Some(MsgType::Tread) => Fcall::Tread(self.decode_tread()?),
-            Some(MsgType::Rread) => Fcall::Rread(self.decode_rread()?),
-            Some(MsgType::Twrite) => Fcall::Twrite(self.decode_twrite()?),
-            Some(MsgType::Rwrite) => Fcall::Rwrite(self.decode_rwrite()?),
-            Some(MsgType::Tclunk) => Fcall::Tclunk(self.decode_tclunk()?),
-            Some(MsgType::Rclunk) => Fcall::Rclunk(self.decode_rclunk()?),
-            Some(MsgType::Tremove) => Fcall::Tremove(self.decode_tremove()?),
-            Some(MsgType::Rremove) => Fcall::Rremove(self.decode_rremove()?),
-            Some(MsgType::Tlerror) | None => return Err(invalid_9p_msg()),
+        let fcall = match msg_type {
+            Some(FcallType::Rlerror) => Fcall::Rlerror(self.decode_rlerror()?),
+            Some(FcallType::Tattach) => Fcall::Tattach(self.decode_tattach()?),
+            Some(FcallType::Rattach) => Fcall::Rattach(self.decode_rattach()?),
+            Some(FcallType::Tstatfs) => Fcall::Tstatfs(self.decode_tstatfs()?),
+            Some(FcallType::Rstatfs) => Fcall::Rstatfs(self.decode_rstatfs()?),
+            Some(FcallType::Tlopen) => Fcall::Tlopen(self.decode_tlopen()?),
+            Some(FcallType::Rlopen) => Fcall::Rlopen(self.decode_rlopen()?),
+            Some(FcallType::Tlcreate) => Fcall::Tlcreate(self.decode_tlcreate()?),
+            Some(FcallType::Rlcreate) => Fcall::Rlcreate(self.decode_rlcreate()?),
+            Some(FcallType::Tsymlink) => Fcall::Tsymlink(self.decode_tsymlink()?),
+            Some(FcallType::Rsymlink) => Fcall::Rsymlink(self.decode_rsymlink()?),
+            Some(FcallType::Tmknod) => Fcall::Tmknod(self.decode_tmknod()?),
+            Some(FcallType::Rmknod) => Fcall::Rmknod(self.decode_rmknod()?),
+            Some(FcallType::Trename) => Fcall::Trename(self.decode_trename()?),
+            Some(FcallType::Rrename) => Fcall::Rrename(self.decode_rrename()?),
+            Some(FcallType::Treadlink) => Fcall::Treadlink(self.decode_treadlink()?),
+            Some(FcallType::Rreadlink) => Fcall::Rreadlink(self.decode_rreadlink()?),
+            Some(FcallType::Tgetattr) => Fcall::Tgetattr(self.decode_tgetattr()?),
+            Some(FcallType::Rgetattr) => Fcall::Rgetattr(self.decode_rgetattr()?),
+            Some(FcallType::Tsetattr) => Fcall::Tsetattr(self.decode_tsetattr()?),
+            Some(FcallType::Rsetattr) => Fcall::Rsetattr(self.decode_rsetattr()?),
+            Some(FcallType::Txattrwalk) => Fcall::Txattrwalk(self.decode_txattrwalk()?),
+            Some(FcallType::Rxattrwalk) => Fcall::Rxattrwalk(self.decode_rxattrwalk()?),
+            Some(FcallType::Txattrcreate) => Fcall::Txattrcreate(self.decode_txattrcreate()?),
+            Some(FcallType::Rxattrcreate) => Fcall::Rxattrcreate(self.decode_rxattrcreate()?),
+            Some(FcallType::Treaddir) => Fcall::Treaddir(self.decode_treaddir()?),
+            Some(FcallType::Rreaddir) => Fcall::Rreaddir(self.decode_rreaddir()?),
+            Some(FcallType::Tfsync) => Fcall::Tfsync(self.decode_tfsync()?),
+            Some(FcallType::Rfsync) => Fcall::Rfsync(self.decode_rfsync()?),
+            Some(FcallType::Tlock) => Fcall::Tlock(self.decode_tlock()?),
+            Some(FcallType::Rlock) => Fcall::Rlock(self.decode_rlock()?),
+            Some(FcallType::Tgetlock) => Fcall::Tgetlock(self.decode_tgetlock()?),
+            Some(FcallType::Rgetlock) => Fcall::Rgetlock(self.decode_rgetlock()?),
+            Some(FcallType::Tlink) => Fcall::Tlink(self.decode_tlink()?),
+            Some(FcallType::Rlink) => Fcall::Rlink(self.decode_rlink()?),
+            Some(FcallType::Tmkdir) => Fcall::Tmkdir(self.decode_tmkdir()?),
+            Some(FcallType::Rmkdir) => Fcall::Rmkdir(self.decode_rmkdir()?),
+            Some(FcallType::Trenameat) => Fcall::Trenameat(self.decode_trenameat()?),
+            Some(FcallType::Rrenameat) => Fcall::Rrenameat(self.decode_rrenameat()?),
+            Some(FcallType::Tunlinkat) => Fcall::Tunlinkat(self.decode_tunlinkat()?),
+            Some(FcallType::Runlinkat) => Fcall::Runlinkat(self.decode_runlinkat()?),
+            Some(FcallType::Tauth) => Fcall::Tauth(self.decode_tauth()?),
+            Some(FcallType::Rauth) => Fcall::Rauth(self.decode_rauth()?),
+            Some(FcallType::Tversion) => Fcall::Tversion(self.decode_tversion()?),
+            Some(FcallType::Rversion) => Fcall::Rversion(self.decode_rversion()?),
+            Some(FcallType::Tflush) => Fcall::Tflush(self.decode_tflush()?),
+            Some(FcallType::Rflush) => Fcall::Rflush(self.decode_rflush()?),
+            Some(FcallType::Twalk) => Fcall::Twalk(self.decode_twalk()?),
+            Some(FcallType::Rwalk) => Fcall::Rwalk(self.decode_rwalk()?),
+            Some(FcallType::Tread) => Fcall::Tread(self.decode_tread()?),
+            Some(FcallType::Rread) => Fcall::Rread(self.decode_rread()?),
+            Some(FcallType::Twrite) => Fcall::Twrite(self.decode_twrite()?),
+            Some(FcallType::Rwrite) => Fcall::Rwrite(self.decode_rwrite()?),
+            Some(FcallType::Tclunk) => Fcall::Tclunk(self.decode_tclunk()?),
+            Some(FcallType::Rclunk) => Fcall::Rclunk(self.decode_rclunk()?),
+            Some(FcallType::Tremove) => Fcall::Tremove(self.decode_tremove()?),
+            Some(FcallType::Rremove) => Fcall::Rremove(self.decode_rremove()?),
+            Some(FcallType::Tlerror) | None => return Err(invalid_9p_msg()),
         };
-        Ok(Msg { tag, body })
+        Ok(TaggedFcall { tag, fcall })
     }
 }

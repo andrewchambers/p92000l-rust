@@ -217,10 +217,10 @@ where
     let mut dbuf: Vec<u8> = Vec::with_capacity(8192);
 
     // Handle version and size buffers.
-    match fcall::read_msg(r, &mut mbuf) {
-        Ok(fcall::Msg {
+    match fcall::read(r, &mut mbuf) {
+        Ok(fcall::TaggedFcall {
             tag: fcall::NOTAG,
-            body:
+            fcall:
                 Fcall::Tversion(Tversion {
                     ref msize,
                     ref version,
@@ -231,12 +231,12 @@ where
             assert!(rversion.msize >= 512);
             mbuf.resize(rversion.msize as usize, 0);
             dbuf.resize((rversion.msize - fcall::IOHDRSZ) as usize, 0);
-            if write_msg(
+            if fcall::write(
                 w,
                 &mut mbuf,
-                &fcall::Msg {
+                &fcall::TaggedFcall {
                     tag: fcall::NOTAG,
-                    body: rversion.into(),
+                    fcall: rversion.into(),
                 },
             )
             .is_err()
@@ -248,9 +248,7 @@ where
         Err(_) => return,
     }
 
-    while let Ok(msg) = fcall::read_msg(r, &mut mbuf) {
-        // dbg!(&msg);
-
+    while let Ok(req) = fcall::read(r, &mut mbuf) {
         macro_rules! get_fid {
             ($ident:ident, $e:expr) => {
                 match fids.get_mut(&$ident) {
@@ -279,7 +277,7 @@ where
             }};
         }
 
-        let resp = match msg.body {
+        let resp = match req.fcall {
             Fcall::Tstatfs(Tstatfs { fid }) => get_fid!(fid, fs.statfs(fid).into()),
             Fcall::Tlopen(Tlopen { fid, ref flags }) => {
                 get_fid!(fid, fs.lopen(fid, *flags).into())
@@ -456,19 +454,18 @@ where
             _ => Fcall::Rlerror(fcall::Rlerror { ecode: EOPNOTSUPP }),
         };
 
-        let resp_msg = fcall::Msg {
-            tag: msg.tag,
-            body: resp,
+        let tagged_resp = fcall::TaggedFcall {
+            tag: req.tag,
+            fcall: resp,
         };
 
-        // dbg!(&resp_msg);
-        if fcall::write_msg(w, &mut mbuf, &resp_msg).is_err() {
+        if fcall::write(w, &mut mbuf, &tagged_resp).is_err() {
             break;
         }
 
         if let Fcall::Rread(Rread {
             data: Cow::Owned(mut data),
-        }) = resp_msg.body
+        }) = tagged_resp.fcall
         {
             // reclaim the data buffer.
             std::mem::swap(&mut dbuf, &mut data);

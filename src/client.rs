@@ -1,5 +1,5 @@
 use super::fcall;
-use super::fcall::Fcall;
+use super::fcall::{Fcall, TaggedFcall};
 use crossbeam_channel as channel;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -137,22 +137,22 @@ impl DotlClient {
         let mut wbuf = Vec::with_capacity(bufsize);
         let mut rbuf = Vec::with_capacity(bufsize);
 
-        fcall::write_msg(
+        fcall::write(
             &mut w,
             &mut wbuf,
-            &fcall::Msg {
+            &TaggedFcall {
                 tag: fcall::NOTAG,
-                body: Fcall::Tversion(fcall::Tversion {
+                fcall: Fcall::Tversion(fcall::Tversion {
                     msize: bufsize.min(u32::MAX as usize) as u32,
                     version: Cow::from(fcall::P92000L),
                 }),
             },
         )?;
 
-        match fcall::read_msg(&mut r, &mut rbuf)? {
-            fcall::Msg {
+        match fcall::read(&mut r, &mut rbuf)? {
+            TaggedFcall {
                 tag: fcall::NOTAG,
-                body: Fcall::Rversion(fcall::Rversion { msize, version }),
+                fcall: Fcall::Rversion(fcall::Rversion { msize, version }),
             } => {
                 if version != fcall::P92000L {
                     return Err(err_other("protocol negotiation failed"));
@@ -189,10 +189,10 @@ impl DotlClient {
     fn read_worker(
         mut r: TcpStream,
         mut rbuf: Vec<u8>,
-        responses: channel::Sender<fcall::Msg<'static>>,
+        responses: channel::Sender<TaggedFcall<'static>>,
     ) {
         loop {
-            match fcall::read_msg(&mut r, &mut rbuf) {
+            match fcall::read(&mut r, &mut rbuf) {
                 Ok(msg) => {
                     if responses.send(msg.clone_static()).is_err() {
                         return;
@@ -207,17 +207,17 @@ impl DotlClient {
         mut w: TcpStream,
         mut wbuf: Vec<u8>,
         requests: channel::Receiver<FcallRequest>,
-        responses: channel::Receiver<fcall::Msg<'static>>,
+        responses: channel::Receiver<TaggedFcall<'static>>,
     ) {
         let mut in_flight = InflightFcalls::new();
 
         'events: loop {
             channel::select! {
-                recv(responses) -> msg => {
-                    match msg {
-                        Ok(msg) => {
-                            if let Some(respond_to) = in_flight.remove(msg.tag) {
-                                let _ = respond_to.send(msg.body);
+                recv(responses) -> response => {
+                    match response {
+                        Ok(response) => {
+                            if let Some(respond_to) = in_flight.remove(response.tag) {
+                                let _ = respond_to.send(response.fcall);
                             }
                         }
                         Err(_) => break 'events,
@@ -226,9 +226,9 @@ impl DotlClient {
                 recv(requests) -> request => {
                     match request {
                         Ok(request) => if let Some(tag) = in_flight.add(request.respond) {
-                            if fcall::write_msg(&mut w, &mut wbuf,  &fcall::Msg {
+                            if fcall::write(&mut w, &mut wbuf,  &TaggedFcall {
                                 tag,
-                                body: request.fcall,
+                                fcall: request.fcall,
                             }).is_err() {
                                 break 'events;
                             };
