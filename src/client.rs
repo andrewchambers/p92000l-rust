@@ -3,7 +3,6 @@ use super::fcall::{Fcall, TaggedFcall};
 use crossbeam_channel as channel;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
@@ -11,10 +10,6 @@ use std::thread;
 
 fn err_other(msg: &str) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, msg)
-}
-
-fn err_not_dir() -> std::io::Error {
-    err_other("not a directory")
 }
 
 fn err_io() -> std::io::Error {
@@ -29,63 +24,63 @@ fn err_unexpected_response() -> std::io::Error {
     err_other("unexpected response from server")
 }
 
-struct Fid {
-    id: u32,
-    set: Arc<Mutex<HashSet<u32>>>,
+struct FidsetInner {
+    set: HashSet<u32>,
+    next: u32,
 }
 
-impl Drop for Fid {
-    fn drop(&mut self) {
-        self.set.lock().unwrap().remove(&self.id);
+impl FidsetInner {
+    fn new() -> FidsetInner {
+        FidsetInner {
+            set: HashSet::new(),
+            next: fcall::NOFID,
+        }
+    }
+
+    fn fresh_id(&mut self) -> Option<u32> {
+        if self.set.len() == (fcall::NOFID - 1) as usize {
+            return None;
+        }
+        loop {
+            if self.next == fcall::NOFID {
+                self.next = 0;
+            } else {
+                self.next += 1;
+            }
+            if !self.set.contains(&self.next) {
+                let id = self.next;
+                self.set.insert(id);
+                return Some(id);
+            }
+        }
     }
 }
 
 struct Fidset {
-    set: Arc<Mutex<HashSet<u32>>>,
-    next: Mutex<u32>,
+    inner: Arc<Mutex<FidsetInner>>,
 }
 
 impl Fidset {
     fn new() -> Fidset {
         Fidset {
-            set: Arc::new(Mutex::new(HashSet::new())),
-            next: Mutex::new(fcall::NOFID),
+            inner: Arc::new(Mutex::new(FidsetInner::new())),
         }
     }
 
-    fn fresh(&self) -> Option<Fid> {
-        let mut next = self.next.lock().unwrap();
-        let mut set = self.set.lock().unwrap();
-        if set.len() == (fcall::NOFID - 1) as usize {
-            return None;
-        }
-        loop {
-            if *next == fcall::NOFID {
-                *next = 0;
-            } else {
-                *next += 1;
-            }
-            if !set.contains(&next) {
-                let id = *next;
-                set.insert(id);
-                return Some(Fid {
-                    id,
-                    set: self.set.clone(),
-                });
-            }
-        }
+    fn fresh_id(&self) -> Option<u32> {
+        self.inner.lock().unwrap().fresh_id()
     }
 }
 
-struct InflightFcallsState {
+struct InflightFcallsInner {
     disconnected: bool,
     map: HashMap<u16, channel::Sender<Fcall<'static>>>,
     next_tag: u16,
 }
 
-impl InflightFcallsState {
-    fn new() -> InflightFcallsState {
-        InflightFcallsState {
+impl InflightFcallsInner {
+    fn new() -> InflightFcallsInner {
+        InflightFcallsInner {
             disconnected: false,
             map: HashMap::new(),
             next_tag: fcall::NOTAG,
@@ -104,7 +99,7 @@ impl InflightFcallsState {
         };
 
         if self.map.len() == (fcall::NOTAG - 1) as usize {
-            return Err(err_other("too many in flight fcalls"));
+            return Err(err_other("tags exhausted"));
         }
 
         loop {
@@ -128,26 +123,26 @@ impl InflightFcallsState {
 
 #[derive(Clone)]
 struct InflightFcalls {
-    state: Arc<Mutex<InflightFcallsState>>,
+    inner: Arc<Mutex<InflightFcallsInner>>,
 }
 
 impl InflightFcalls {
     fn new() -> InflightFcalls {
         InflightFcalls {
-            state: Arc::new(Mutex::new(InflightFcallsState::new())),
+            inner: Arc::new(Mutex::new(InflightFcallsInner::new())),
         }
     }
 
     fn mark_disconnected(&self) {
-        self.state.lock().unwrap().mark_disconnected()
+        self.inner.lock().unwrap().mark_disconnected()
     }
 
     fn add(&self, respond_to: channel::Sender<Fcall<'static>>) -> Result<u16, std::io::Error> {
-        self.state.lock().unwrap().add(respond_to)
+        self.inner.lock().unwrap().add(respond_to)
     }
 
     fn remove(&self, tag: u16) -> Option<channel::Sender<Fcall<'static>>> {
-        self.state.lock().unwrap().remove(tag)
+        self.inner.lock().unwrap().remove(tag)
     }
 }
 
@@ -160,17 +155,17 @@ struct DotlClientState {
     msize: u32,
     fids: Fidset,
     fcalls: InflightFcalls,
+    // Threads use a shared buffer and connection guarded by a mutex,
+    // this slightly odd design lets us avoid copying when writing.
     write_state: Mutex<ClientWriteState>,
     read_worker_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Drop for DotlClientState {
     fn drop(&mut self) {
-        {
-            let write_state = self.write_state.lock().unwrap();
-            write_state.w.shutdown(std::net::Shutdown::Both).unwrap();
-            drop(write_state)
-        }
+        let write_state = self.write_state.lock().unwrap();
+        write_state.w.shutdown(std::net::Shutdown::Both).unwrap();
+        drop(write_state);
         if let Some(read_worker_handle) = self.read_worker_handle.take() {
             let _ = read_worker_handle.join();
         }
@@ -255,29 +250,32 @@ impl DotlClient {
     }
 
     fn fresh_fid(&self) -> Result<Fid, std::io::Error> {
-        match self.state.fids.fresh() {
-            Some(fid) => Ok(fid),
+        match self.state.fids.fresh_id() {
+            Some(id) => Ok(Fid {
+                client: self.clone(),
+                needs_clunk: false,
+                id: id,
+            }),
             None => Err(err_other("fids exhausted")),
         }
     }
 
     fn fcall<'a>(&self, fcall: Fcall<'a>) -> Result<Fcall<'static>, std::io::Error> {
         let (tx, rx) = channel::bounded(1);
-        {
-            let mut write_state_guard = self.state.write_state.lock().unwrap();
-            let write_state = write_state_guard.deref_mut();
-            let w = &mut write_state.w;
-            let buf = &mut write_state.buf;
-            fcall::write(
-                w,
-                buf,
-                &TaggedFcall {
-                    tag: self.state.fcalls.add(tx)?,
-                    fcall,
-                },
-            )?;
-        }
-        Ok(rx.recv().or_else(err_io_result)?)
+        let mut write_state_guard = self.state.write_state.lock().unwrap();
+        let write_state = write_state_guard.deref_mut();
+        let w = &mut write_state.w;
+        let buf = &mut write_state.buf;
+        fcall::write(
+            w,
+            buf,
+            &TaggedFcall {
+                tag: self.state.fcalls.add(tx)?,
+                fcall,
+            },
+        )?;
+        drop(write_state_guard);
+        rx.recv().or_else(err_io_result)
     }
 
     pub fn attach(
@@ -285,8 +283,8 @@ impl DotlClient {
         n_uname: u32,
         uname: &str,
         aname: &str,
-    ) -> Result<DotlFile, std::io::Error> {
-        let fid = self.fresh_fid()?;
+    ) -> Result<(fcall::Qid, Fid), std::io::Error> {
+        let mut fid = self.fresh_fid()?;
         match self.fcall(Fcall::Tattach(fcall::Tattach {
             afid: fcall::NOFID,
             fid: fid.id,
@@ -294,31 +292,24 @@ impl DotlClient {
             uname: Cow::from(uname),
             aname: Cow::from(aname),
         }))? {
-            Fcall::Rattach(fcall::Rattach { qid }) => Ok(DotlFile {
-                qid,
-                fid,
-                offset: 0,
-                client: self.clone(),
-            }),
+            Fcall::Rattach(fcall::Rattach { qid }) => {
+                fid.needs_clunk = true;
+                Ok((qid, fid))
+            }
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }
     }
 }
 
-pub struct DotlFile {
-    pub qid: fcall::Qid,
+pub struct Fid {
     client: DotlClient,
-    offset: u64,
-    fid: Fid,
+    needs_clunk: bool,
+    id: u32,
 }
 
-impl DotlFile {
-    pub fn is_dir(&self) -> bool {
-        self.qid.typ.contains(fcall::QidType::DIR)
-    }
-
-    fn primitive_walk(&self, wnames: &[&str]) -> Result<DotlFile, std::io::Error> {
+impl Fid {
+    fn walk1(&self, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, Fid), std::io::Error> {
         if wnames.len() > fcall::MAXWELEM {
             return Err(err_other("walk has too many wnames"));
         }
@@ -328,43 +319,40 @@ impl DotlFile {
             .map(|name| Cow::from(name.to_string()))
             .collect();
 
-        let newfid = self.client.fresh_fid()?;
+        let mut new_fid = self.client.fresh_fid()?;
 
         match self.client.fcall(Fcall::Twalk(fcall::Twalk {
-            fid: self.fid.id,
-            newfid: newfid.id,
+            fid: self.id,
+            new_fid: new_fid.id,
             wnames,
         }))? {
             Fcall::Rwalk(fcall::Rwalk { wqids }) => {
-                let qid = *wqids.last().unwrap_or(&self.qid);
-                Ok(DotlFile {
-                    fid: newfid,
-                    qid,
-                    client: self.client.clone(),
-                    offset: 0,
-                })
+                new_fid.needs_clunk = true;
+                Ok((wqids, new_fid))
             }
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }
     }
 
-    pub fn walk(&self, p: &str) -> Result<DotlFile, std::io::Error> {
-        let wnames: Vec<&str> = p.split('/').filter(|x| !x.is_empty()).collect();
+    pub fn walk(&self, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, Fid), std::io::Error> {
+        let mut wqids = Vec::with_capacity(fcall::MAXWELEM);
         if wnames.is_empty() {
-            return self.primitive_walk(&wnames);
+            return self.walk1(&wnames);
         }
         let mut f = None;
         for wnames in wnames.chunks(fcall::MAXWELEM) {
             let fref = f.as_ref().unwrap_or(self);
-            f = Some(fref.primitive_walk(wnames)?);
+            let (mut new_wqids, new_f) = fref.walk1(wnames)?;
+            wqids.append(&mut new_wqids);
+            f = Some(new_f);
         }
-        Ok(f.unwrap())
+        Ok((wqids, f.unwrap()))
     }
 
     pub fn open(&self, flags: fcall::LOpenFlags) -> Result<(), std::io::Error> {
         match self.client.fcall(Fcall::Tlopen(fcall::Tlopen {
-            fid: self.fid.id,
+            fid: self.id,
             flags,
         }))? {
             Fcall::Rlopen(fcall::Rlopen { .. }) => Ok(()),
@@ -373,40 +361,87 @@ impl DotlFile {
         }
     }
 
-    pub fn read_dir(&self) -> Result<Vec<fcall::DirEntry<'static>>, std::io::Error> {
-        if !self.is_dir() {
-            return Err(err_not_dir());
-        }
+    pub fn read_dir1(&self, offset: u64) -> Result<Vec<fcall::DirEntry<'static>>, std::io::Error> {
         let count: u32 = self.client.state.msize as u32 - fcall::READDIRHDRSZ;
+        match self.client.fcall(Fcall::Treaddir(fcall::Treaddir {
+            fid: self.id,
+            offset,
+            count,
+        }))? {
+            Fcall::Rreaddir(fcall::Rreaddir { data }) => Ok(data.data),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    pub fn read_dir(&self) -> Result<Vec<fcall::DirEntry<'static>>, std::io::Error> {
         let mut offset: u64 = 0;
         let mut entries: Vec<fcall::DirEntry> = Vec::new();
         'read_all: loop {
-            match self.client.fcall(Fcall::Treaddir(fcall::Treaddir {
-                fid: self.fid.id,
-                offset,
-                count,
-            }))? {
-                Fcall::Rreaddir(fcall::Rreaddir { mut data }) => {
-                    if data.data.is_empty() {
-                        break 'read_all;
-                    }
-                    entries.append(&mut data.data);
-                    offset = entries.last().unwrap().offset;
-                }
-                Fcall::Rlerror(err) => return Err(err.into_io_error()),
-                _ => return Err(err_unexpected_response()),
+            let mut new_entries = self.read_dir1(offset)?;
+            if new_entries.is_empty() {
+                break 'read_all;
             }
+            entries.append(&mut new_entries);
+            offset = entries.last().unwrap().offset;
         }
         Ok(entries)
     }
 
-    fn _close(&mut self) -> Result<(), std::io::Error> {
+    pub fn read(&mut self, offset: u64, buf: &mut [u8]) -> std::io::Result<usize> {
+        let count = buf
+            .len()
+            .min((self.client.state.msize - fcall::IOHDRSZ) as usize) as u32;
+        match self.client.fcall(Fcall::Tread(fcall::Tread {
+            fid: self.id,
+            offset,
+            count,
+        }))? {
+            Fcall::Rread(fcall::Rread { data }) => {
+                buf.copy_from_slice(&data[..]);
+                Ok(data.len())
+            }
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    pub fn write(&mut self, offset: u64, buf: &[u8]) -> std::io::Result<usize> {
+        let count = buf
+            .len()
+            .min((self.client.state.msize - fcall::IOHDRSZ) as usize);
+        match self.client.fcall(Fcall::Twrite(fcall::Twrite {
+            fid: self.id,
+            offset,
+            data: Cow::from(&buf[..count]),
+        }))? {
+            Fcall::Rwrite(fcall::Rwrite { count }) => Ok(count as usize),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    pub fn fsync(&mut self) -> std::io::Result<()> {
         match self
             .client
-            .fcall(Fcall::Tclunk(fcall::Tclunk { fid: self.fid.id }))?
+            .fcall(Fcall::Tfsync(fcall::Tfsync { fid: self.id }))?
+        {
+            Fcall::Rfsync { .. } => Ok(()),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    fn _clunk(&mut self) -> Result<(), std::io::Error> {
+        if !self.needs_clunk {
+            return Ok(());
+        }
+        match self
+            .client
+            .fcall(Fcall::Tclunk(fcall::Tclunk { fid: self.id }))?
         {
             Fcall::Rclunk { .. } => {
-                self.fid.id = fcall::NOFID;
+                self.needs_clunk = false;
                 Ok(())
             }
             Fcall::Rlerror(err) => Err(err.into_io_error()),
@@ -414,67 +449,21 @@ impl DotlFile {
         }
     }
 
-    pub fn close(mut self) -> Result<(), std::io::Error> {
-        self._close()
+    pub fn clunk(mut self) -> Result<(), std::io::Error> {
+        self._clunk()
     }
 }
 
-impl Drop for DotlFile {
+impl Drop for Fid {
     fn drop(&mut self) {
-        if self.fid.id != fcall::NOFID {
-            let _ = self._close();
-        }
-    }
-}
-
-impl Read for DotlFile {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let count = buf
-            .len()
-            .min((self.client.state.msize - fcall::IOHDRSZ) as usize) as u32;
-        match self.client.fcall(Fcall::Tread(fcall::Tread {
-            fid: self.fid.id,
-            offset: self.offset,
-            count,
-        }))? {
-            Fcall::Rread(fcall::Rread { data }) => {
-                buf.copy_from_slice(&data[..]);
-                self.offset += data.len() as u64;
-                Ok(data.len())
-            }
-            Fcall::Rlerror(err) => Err(err.into_io_error()),
-            _ => Err(err_unexpected_response()),
-        }
-    }
-}
-
-impl Write for DotlFile {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let count = buf
-            .len()
-            .min((self.client.state.msize - fcall::IOHDRSZ) as usize);
-        match self.client.fcall(Fcall::Twrite(fcall::Twrite {
-            fid: self.fid.id,
-            offset: self.offset,
-            data: Cow::from(&buf[..count]),
-        }))? {
-            Fcall::Rwrite(fcall::Rwrite { count }) => {
-                self.offset += count as u64;
-                Ok(count as usize)
-            }
-            Fcall::Rlerror(err) => Err(err.into_io_error()),
-            _ => Err(err_unexpected_response()),
-        }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self
-            .client
-            .fcall(Fcall::Tfsync(fcall::Tfsync { fid: self.fid.id }))?
-        {
-            Fcall::Rfsync { .. } => Ok(()),
-            Fcall::Rlerror(err) => Err(err.into_io_error()),
-            _ => Err(err_unexpected_response()),
-        }
+        let _ = self._clunk();
+        self.client
+            .state
+            .fids
+            .inner
+            .lock()
+            .unwrap()
+            .set
+            .remove(&self.id);
     }
 }

@@ -601,7 +601,7 @@ pub struct Rsetattr {}
 #[derive(Clone, Debug)]
 pub struct Txattrwalk<'a> {
     pub fid: u32,
-    pub newfid: u32,
+    pub new_fid: u32,
     pub name: Cow<'a, str>,
 }
 
@@ -743,7 +743,7 @@ pub struct Rflush {}
 #[derive(Clone, Debug)]
 pub struct Twalk<'a> {
     pub fid: u32,
-    pub newfid: u32,
+    pub new_fid: u32,
     pub wnames: Vec<Cow<'a, str>>,
 }
 
@@ -1193,7 +1193,7 @@ impl<'a> Fcall<'a> {
             Fcall::Rsetattr(v) => Fcall::Rsetattr(v.clone()),
             Fcall::Txattrwalk(v) => Fcall::Txattrwalk(Txattrwalk {
                 fid: v.fid,
-                newfid: v.newfid,
+                new_fid: v.new_fid,
                 name: Cow::from(v.name.clone().into_owned()),
             }),
             Fcall::Rxattrwalk(v) => Fcall::Rxattrwalk(v.clone()),
@@ -1300,7 +1300,7 @@ impl<'a> Fcall<'a> {
             Fcall::Rflush(v) => Fcall::Rflush(v.clone()),
             Fcall::Twalk(v) => Fcall::Twalk(Twalk {
                 fid: v.fid,
-                newfid: v.newfid,
+                new_fid: v.new_fid,
                 wnames: v
                     .wnames
                     .iter()
@@ -1787,7 +1787,7 @@ fn encode_rsetattr<W: Write>(_w: &mut W, _v: &Rsetattr) -> std::io::Result<()> {
 }
 fn encode_txattrwalk<'a, W: Write>(w: &mut W, v: &Txattrwalk<'a>) -> std::io::Result<()> {
     encode_u32(w, v.fid)?;
-    encode_u32(w, v.newfid)?;
+    encode_u32(w, v.new_fid)?;
     encode_str(w, &v.name)?;
     Ok(())
 }
@@ -1933,7 +1933,7 @@ fn encode_rflush<W: Write>(_w: &mut W, _v: &Rflush) -> std::io::Result<()> {
 
 fn encode_twalk<'a, W: Write>(w: &'a mut W, v: &Twalk<'a>) -> std::io::Result<()> {
     encode_u32(w, v.fid)?;
-    encode_u32(w, v.newfid)?;
+    encode_u32(w, v.new_fid)?;
     encode_vec_str(w, &v.wnames)?;
     Ok(())
 }
@@ -2419,7 +2419,7 @@ impl<'a, 'b: 'a> Decoder<'b> {
     fn decode_txattrwalk(&mut self) -> std::io::Result<Txattrwalk<'b>> {
         Ok(Txattrwalk {
             fid: self.decode_u32()?,
-            newfid: self.decode_u32()?,
+            new_fid: self.decode_u32()?,
             name: self.decode_str()?,
         })
     }
@@ -2587,7 +2587,7 @@ impl<'a, 'b: 'a> Decoder<'b> {
     fn decode_twalk(&mut self) -> std::io::Result<Twalk<'b>> {
         Ok(Twalk {
             fid: self.decode_u32()?,
-            newfid: self.decode_u32()?,
+            new_fid: self.decode_u32()?,
             wnames: self.decode_vec_str()?,
         })
     }

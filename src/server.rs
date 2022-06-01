@@ -455,9 +455,9 @@ where
             /*
             Fcall::Txattrwalk {
                 fid,
-                newfid,
+                new_fid,
                 ref name,
-            } => new_fid!(newfid, get_fid!(fid, fs.rxattrwalk(fid, newfid, name))),
+            } => new_fid!(new_fid, get_fid!(fid, fs.rxattrwalk(fid, new_fid, name))),
             Fcall::Txattrcreate {
                 fid,
                 ref name,
@@ -496,13 +496,13 @@ where
             },
             Fcall::Twalk(Twalk {
                 fid,
-                newfid,
+                new_fid,
                 ref wnames,
             }) => match fids.get_mut(&fid) {
                 Some(fid) => match fs.walk(fid, wnames) {
                     Ok((None, rwalk)) => rwalk.into(),
                     Ok((Some(f), rwalk)) => {
-                        fids.insert(newfid, f);
+                        fids.insert(new_fid, f);
                         rwalk.into()
                     }
                     Err(rlerror) => rlerror.into(),
