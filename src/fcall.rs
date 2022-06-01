@@ -32,6 +32,9 @@ pub const IOHDRSZ: u32 = 24;
 /// Room for readdir header
 pub const READDIRHDRSZ: u32 = 24;
 
+/// Maximum elements in a single walk.
+pub const MAXWELEM: usize = 13;
+
 bitflags! {
     /// File lock type, Flock.typ
     pub struct LockType: u8 {
@@ -2134,7 +2137,6 @@ impl<'a, 'b: 'a> Decoder<'b> {
     }
 
     fn decode_direntrydata(&mut self) -> std::io::Result<DirEntryData<'b>> {
-        let start_len = self.buf.len();
         let end_len = self.buf.len() - self.decode_u32()? as usize;
         let mut v = Vec::new();
         while self.buf.len() > end_len {

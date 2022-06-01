@@ -119,12 +119,16 @@ fn err_other(msg: &str) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, msg)
 }
 
-fn eio() -> std::io::Error {
+fn err_not_dir() -> std::io::Error {
+    err_other("not a directory")
+}
+
+fn err_io() -> std::io::Error {
     err_other("io error")
 }
 
-fn eio_result<R, E>(_e: E) -> Result<R, std::io::Error> {
-    Err(eio())
+fn err_io_result<R, E>(_e: E) -> Result<R, std::io::Error> {
+    Err(err_io())
 }
 
 fn err_unexpected_response() -> std::io::Error {
@@ -272,7 +276,7 @@ impl DotlClient {
 
         let fid = match self.fresh_fid() {
             Some(fid) => fid,
-            None => return Err(eio()),
+            None => return Err(err_io()),
         };
 
         self.requests
@@ -286,9 +290,9 @@ impl DotlClient {
                 }),
                 respond: tx,
             })
-            .or_else(eio_result)?;
+            .or_else(err_io_result)?;
 
-        match rx.recv().or_else(eio_result)? {
+        match rx.recv().or_else(err_io_result)? {
             Fcall::Rattach(fcall::Rattach { qid }) => Ok(DotlFile {
                 qid,
                 fid,
@@ -300,13 +304,17 @@ impl DotlClient {
         }
     }
 
-    fn walk(&self, fid: &Fid, p: &str) -> Result<DotlFile, std::io::Error> {
+    fn walk(&self, fid: &Fid, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, Fid), std::io::Error> {
+        
+        if wnames.len() > fcall::MAXWELEM {
+            return Err(err_other("walk has too many wnames"));
+        }
 
-        let wnames = p.split("/").filter(|x| !x.is_empty()).map(|name| Cow::from(name.to_string())).collect();
-
+        let wnames = wnames.iter().map(|name| Cow::from(name.to_string())).collect();
+        
         let newfid = match self.fresh_fid() {
             Some(fid) => fid,
-            None => return Err(eio()),
+            None => return Err(err_io()),
         };
 
         let (tx, rx) = channel::bounded(1);
@@ -315,22 +323,11 @@ impl DotlClient {
                 fcall: Fcall::Twalk(fcall::Twalk { fid: fid.id, newfid: newfid.id, wnames }),
                 respond: tx,
             })
-            .or_else(eio_result)?;
+            .or_else(err_io_result)?;
         
-        match rx.recv().or_else(eio_result)? {
+        match rx.recv().or_else(err_io_result)? {
             Fcall::Rwalk(fcall::Rwalk { wqids }) => {
-                let qid = if let Some(qid) = wqids.last() {
-                    *qid
-                } else {
-                    // Overwritten by caller if necessary.
-                    fcall::Qid{typ: fcall::QidType::FILE, path: 0, version: 0}
-                };
-                Ok(DotlFile {
-                    qid,
-                    fid: newfid,
-                    offset: 0,
-                    client: self.clone(),
-                })
+                Ok((wqids, newfid))
             } ,
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
@@ -344,8 +341,8 @@ impl DotlClient {
                 fcall: Fcall::Tlopen(fcall::Tlopen { fid: fid.id, flags }),
                 respond: tx,
             })
-            .or_else(eio_result)?;
-        match rx.recv().or_else(eio_result)? {
+            .or_else(err_io_result)?;
+        match rx.recv().or_else(err_io_result)? {
             Fcall::Rlopen(fcall::Rlopen { .. }) => {
                 Ok(())
             }
@@ -354,7 +351,7 @@ impl DotlClient {
         }
     }
 
-    fn read_dir(&self, fid: &Fid) -> Result<Vec<fcall::DirEntry>, std::io::Error> {
+    fn read_dir(&self, fid: &Fid) -> Result<Vec<fcall::DirEntry<'static>>, std::io::Error> {
         let count: u32 = 8192; // XXX msize - IOHEADR ?
         let mut offset: u64 = 0;
         let mut entries: Vec<fcall::DirEntry> = Vec::new();
@@ -365,8 +362,8 @@ impl DotlClient {
                     fcall: Fcall::Treaddir(fcall::Treaddir { fid: fid.id, offset, count }),
                     respond: tx,
                 })
-                .or_else(eio_result)?;
-            match rx.recv().or_else(eio_result)? {
+                .or_else(err_io_result)?;
+            match rx.recv().or_else(err_io_result)? {
                 Fcall::Rreaddir(fcall::Rreaddir { mut data }) => {
                     if data.data.is_empty() {
                         break 'read_all;
@@ -377,7 +374,6 @@ impl DotlClient {
                 Fcall::Rlerror(err) => return Err(err.into_io_error()),
                 _ => return Err(err_unexpected_response()),
             }
-            dbg!("YYY");
         }
         Ok(entries)
     }
@@ -390,8 +386,8 @@ impl DotlClient {
                 fcall: Fcall::Tread(fcall::Tread { fid: fid.id, offset, count }),
                 respond: tx,
             })
-            .or_else(eio_result)?;
-        match rx.recv().or_else(eio_result)? {
+            .or_else(err_io_result)?;
+        match rx.recv().or_else(err_io_result)? {
             Fcall::Rread(fcall::Rread { data }) => {
                 buf.copy_from_slice(&data[..]);
                 Ok(data.len())
@@ -413,8 +409,8 @@ impl DotlClient {
                 }),
                 respond: tx,
             })
-            .or_else(eio_result)?;
-        match rx.recv().or_else(eio_result)? {
+            .or_else(err_io_result)?;
+        match rx.recv().or_else(err_io_result)? {
             Fcall::Rwrite(fcall::Rwrite { count }) => Ok(count as usize),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
@@ -428,8 +424,8 @@ impl DotlClient {
                 fcall: Fcall::Tfsync(fcall::Tfsync { fid: fid.id }),
                 respond: tx,
             })
-            .or_else(eio_result)?;
-        match rx.recv().or_else(eio_result)? {
+            .or_else(err_io_result)?;
+        match rx.recv().or_else(err_io_result)? {
             Fcall::Rfsync { .. } => Ok(()),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
@@ -443,8 +439,8 @@ impl DotlClient {
                 fcall: Fcall::Tclunk(fcall::Tclunk { fid: fid.id }),
                 respond: tx,
             })
-            .or_else(eio_result)?;
-        match rx.recv().or_else(eio_result)? {
+            .or_else(err_io_result)?;
+        match rx.recv().or_else(err_io_result)? {
             Fcall::Rclunk { .. } => {
                 Ok(())
             }
@@ -462,22 +458,59 @@ pub struct DotlFile {
 }
 
 impl DotlFile {
+    
+    pub fn is_dir(&self) -> bool {
+        self.qid.typ.contains(fcall::QidType::DIR)
+    }
+ 
+    pub fn walk(&self, p: &str) -> Result<DotlFile, std::io::Error> {
+        let wnames: Vec<&str> = p.split("/").filter(|x| !x.is_empty()).collect();
+        if wnames.is_empty() {
+            let (wqids, fid) = self.client.walk(&self.fid, &wnames)?;
+            let qid = *wqids.last().unwrap_or(&self.qid);
+            return Ok(DotlFile {
+                fid,
+                qid,
+                client: self.client.clone(),
+                offset: 0,
+            })
+        }
+        let mut f = None;
+        for wnames in wnames.chunks(fcall::MAXWELEM) {
+            let fref = f.as_ref().unwrap_or(self);
+            let (wqids, fid) = self.client.walk(&fref.fid, wnames)?;
+            let qid = *wqids.last().unwrap_or(&self.qid);
+            let fnew = DotlFile {
+                fid,
+                qid,
+                client: self.client.clone(),
+                offset: 0,
+            };
+            f = Some(fnew);
+        }
+        Ok(f.unwrap())
+    }
 
     pub fn open(&self, flags: u32) -> Result<(), std::io::Error> {
          self.client.open(&self.fid, flags)
     }
-    
-    pub fn walk(&self, p: &str) -> Result<DotlFile, std::io::Error> {
-        let mut f = self.client.walk(&self.fid, p)?;
-        if p.is_empty() {
-            // XXX: Is this special case a problem in our factoring?
-            f.qid = self.qid;
+   
+    pub fn read_dir(&self) -> Result<Vec<fcall::DirEntry<'static>>, std::io::Error> {
+        if !self.is_dir() {
+            return Err(err_not_dir());
         }
-        Ok(f)
+        self.client.read_dir(&self.fid)
     }
 
-    pub fn read_dir(&self) -> Result<Vec<fcall::DirEntry>, std::io::Error> {
-        self.client.read_dir(&self.fid)
+    pub fn read_dir_at(&self, p: &str) -> Result<Vec<fcall::DirEntry<'static>>, std::io::Error> {
+        if !self.is_dir() {
+            return Err(err_not_dir());
+        }
+        let d = self.walk(p)?;
+        d.open(0)?;
+        let result = d.read_dir()?;
+        d.close()?;
+        Ok(result)
     }
 
     pub fn close(mut self) -> Result<(), std::io::Error> {
