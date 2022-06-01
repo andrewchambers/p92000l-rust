@@ -269,8 +269,24 @@ impl DotlClient {
         let _ = w.shutdown(std::net::Shutdown::Write);
     }
 
-    fn fresh_fid(&self) -> Option<Fid> {
-        self.state.fids.fresh()
+    fn fresh_fid(&self) -> Result<Fid, std::io::Error> {
+        match self.state.fids.fresh() {
+            Some(fid) => Ok(fid),
+            None => Err(err_other("fids exhausted")),
+        }
+    }
+
+    fn fcall<'a>(&self, fcall: &Fcall<'a>) -> Result<Fcall<'static>, std::io::Error> {
+        let (tx, rx) = channel::bounded(1);
+        // XXX If we just write directly from this thread
+        // and use a mutex this copy will not be needed.
+        self.requests
+            .send(FcallRequest {
+                fcall: fcall.clone_static(),
+                respond: tx,
+            })
+            .or_else(err_io_result)?;
+        Ok(rx.recv().or_else(err_io_result)?)
     }
 
     pub fn attach(
@@ -279,186 +295,20 @@ impl DotlClient {
         uname: &str,
         aname: &str,
     ) -> Result<DotlFile, std::io::Error> {
-        let (tx, rx) = channel::bounded(1);
-
-        let fid = match self.fresh_fid() {
-            Some(fid) => fid,
-            None => return Err(err_io()),
-        };
-
-        self.requests
-            .send(FcallRequest {
-                fcall: Fcall::Tattach(fcall::Tattach {
-                    afid: fcall::NOFID,
-                    fid: fid.id,
-                    n_uname,
-                    uname: Cow::from(uname.to_owned()),
-                    aname: Cow::from(aname.to_owned()),
-                }),
-                respond: tx,
-            })
-            .or_else(err_io_result)?;
-
-        match rx.recv().or_else(err_io_result)? {
+        let fid = self.fresh_fid()?;
+        match self.fcall(&Fcall::Tattach(fcall::Tattach {
+            afid: fcall::NOFID,
+            fid: fid.id,
+            n_uname,
+            uname: Cow::from(uname),
+            aname: Cow::from(aname),
+        }))? {
             Fcall::Rattach(fcall::Rattach { qid }) => Ok(DotlFile {
                 qid,
                 fid,
                 offset: 0,
                 client: self.clone(),
             }),
-            Fcall::Rlerror(err) => Err(err.into_io_error()),
-            _ => Err(err_unexpected_response()),
-        }
-    }
-
-    fn walk(&self, fid: &Fid, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, Fid), std::io::Error> {
-        if wnames.len() > fcall::MAXWELEM {
-            return Err(err_other("walk has too many wnames"));
-        }
-
-        let wnames = wnames
-            .iter()
-            .map(|name| Cow::from(name.to_string()))
-            .collect();
-
-        let newfid = match self.fresh_fid() {
-            Some(fid) => fid,
-            None => return Err(err_io()),
-        };
-
-        let (tx, rx) = channel::bounded(1);
-        self.requests
-            .send(FcallRequest {
-                fcall: Fcall::Twalk(fcall::Twalk {
-                    fid: fid.id,
-                    newfid: newfid.id,
-                    wnames,
-                }),
-                respond: tx,
-            })
-            .or_else(err_io_result)?;
-
-        match rx.recv().or_else(err_io_result)? {
-            Fcall::Rwalk(fcall::Rwalk { wqids }) => Ok((wqids, newfid)),
-            Fcall::Rlerror(err) => Err(err.into_io_error()),
-            _ => Err(err_unexpected_response()),
-        }
-    }
-
-    fn open(&self, fid: &Fid, flags: fcall::LOpenFlags) -> Result<(), std::io::Error> {
-        let (tx, rx) = channel::bounded(1);
-        self.requests
-            .send(FcallRequest {
-                fcall: Fcall::Tlopen(fcall::Tlopen { fid: fid.id, flags }),
-                respond: tx,
-            })
-            .or_else(err_io_result)?;
-        match rx.recv().or_else(err_io_result)? {
-            Fcall::Rlopen(fcall::Rlopen { .. }) => Ok(()),
-            Fcall::Rlerror(err) => Err(err.into_io_error()),
-            _ => Err(err_unexpected_response()),
-        }
-    }
-
-    fn read_dir(&self, fid: &Fid) -> Result<Vec<fcall::DirEntry<'static>>, std::io::Error> {
-        let count: u32 = self.state.msize as u32 - fcall::READDIRHDRSZ;
-        let mut offset: u64 = 0;
-        let mut entries: Vec<fcall::DirEntry> = Vec::new();
-        'read_all: loop {
-            let (tx, rx) = channel::bounded(1);
-            self.requests
-                .send(FcallRequest {
-                    fcall: Fcall::Treaddir(fcall::Treaddir {
-                        fid: fid.id,
-                        offset,
-                        count,
-                    }),
-                    respond: tx,
-                })
-                .or_else(err_io_result)?;
-            match rx.recv().or_else(err_io_result)? {
-                Fcall::Rreaddir(fcall::Rreaddir { mut data }) => {
-                    if data.data.is_empty() {
-                        break 'read_all;
-                    }
-                    entries.append(&mut data.data);
-                    offset = entries.last().unwrap().offset;
-                }
-                Fcall::Rlerror(err) => return Err(err.into_io_error()),
-                _ => return Err(err_unexpected_response()),
-            }
-        }
-        Ok(entries)
-    }
-
-    fn read(&self, fid: &Fid, offset: u64, buf: &mut [u8]) -> Result<usize, std::io::Error> {
-        let count = buf.len().min((self.state.msize - fcall::IOHDRSZ) as usize) as u32;
-        let (tx, rx) = channel::bounded(1);
-        self.requests
-            .send(FcallRequest {
-                fcall: Fcall::Tread(fcall::Tread {
-                    fid: fid.id,
-                    offset,
-                    count,
-                }),
-                respond: tx,
-            })
-            .or_else(err_io_result)?;
-        match rx.recv().or_else(err_io_result)? {
-            Fcall::Rread(fcall::Rread { data }) => {
-                buf.copy_from_slice(&data[..]);
-                Ok(data.len())
-            }
-            Fcall::Rlerror(err) => Err(err.into_io_error()),
-            _ => Err(err_unexpected_response()),
-        }
-    }
-
-    fn write(&self, fid: &Fid, offset: u64, buf: &[u8]) -> Result<usize, std::io::Error> {
-        let count = buf.len().min((self.state.msize - fcall::IOHDRSZ) as usize);
-        let (tx, rx) = channel::bounded(1);
-        self.requests
-            .send(FcallRequest {
-                fcall: Fcall::Twrite(fcall::Twrite {
-                    fid: fid.id,
-                    offset,
-                    data: Cow::from(buf[..count].to_vec()),
-                }),
-                respond: tx,
-            })
-            .or_else(err_io_result)?;
-        match rx.recv().or_else(err_io_result)? {
-            Fcall::Rwrite(fcall::Rwrite { count }) => Ok(count as usize),
-            Fcall::Rlerror(err) => Err(err.into_io_error()),
-            _ => Err(err_unexpected_response()),
-        }
-    }
-
-    fn fsync(&self, fid: &Fid) -> Result<(), std::io::Error> {
-        let (tx, rx) = channel::bounded(1);
-        self.requests
-            .send(FcallRequest {
-                fcall: Fcall::Tfsync(fcall::Tfsync { fid: fid.id }),
-                respond: tx,
-            })
-            .or_else(err_io_result)?;
-        match rx.recv().or_else(err_io_result)? {
-            Fcall::Rfsync { .. } => Ok(()),
-            Fcall::Rlerror(err) => Err(err.into_io_error()),
-            _ => Err(err_unexpected_response()),
-        }
-    }
-
-    fn clunk(&self, fid: &Fid) -> Result<(), std::io::Error> {
-        let (tx, rx) = channel::bounded(1);
-        self.requests
-            .send(FcallRequest {
-                fcall: Fcall::Tclunk(fcall::Tclunk { fid: fid.id }),
-                respond: tx,
-            })
-            .or_else(err_io_result)?;
-        match rx.recv().or_else(err_io_result)? {
-            Fcall::Rclunk { .. } => Ok(()),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }
@@ -477,76 +327,159 @@ impl DotlFile {
         self.qid.typ.contains(fcall::QidType::DIR)
     }
 
+    fn primitive_walk(&self, wnames: &[&str]) -> Result<DotlFile, std::io::Error> {
+        if wnames.len() > fcall::MAXWELEM {
+            return Err(err_other("walk has too many wnames"));
+        }
+
+        let wnames = wnames
+            .iter()
+            .map(|name| Cow::from(name.to_string()))
+            .collect();
+
+        let newfid = self.client.fresh_fid()?;
+
+        match self.client.fcall(&Fcall::Twalk(fcall::Twalk {
+            fid: self.fid.id,
+            newfid: newfid.id,
+            wnames,
+        }))? {
+            Fcall::Rwalk(fcall::Rwalk { wqids }) => {
+                let qid = *wqids.last().unwrap_or(&self.qid);
+                Ok(DotlFile {
+                    fid: newfid,
+                    qid,
+                    client: self.client.clone(),
+                    offset: 0,
+                })
+            }
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
     pub fn walk(&self, p: &str) -> Result<DotlFile, std::io::Error> {
         let wnames: Vec<&str> = p.split('/').filter(|x| !x.is_empty()).collect();
         if wnames.is_empty() {
-            let (wqids, fid) = self.client.walk(&self.fid, &wnames)?;
-            let qid = *wqids.last().unwrap_or(&self.qid);
-            return Ok(DotlFile {
-                fid,
-                qid,
-                client: self.client.clone(),
-                offset: 0,
-            });
+            return self.primitive_walk(&wnames);
         }
         let mut f = None;
         for wnames in wnames.chunks(fcall::MAXWELEM) {
             let fref = f.as_ref().unwrap_or(self);
-            let (wqids, fid) = self.client.walk(&fref.fid, wnames)?;
-            let qid = *wqids.last().unwrap_or(&self.qid);
-            let fnew = DotlFile {
-                fid,
-                qid,
-                client: self.client.clone(),
-                offset: 0,
-            };
-            f = Some(fnew);
+            f = Some(fref.primitive_walk(wnames)?);
         }
         Ok(f.unwrap())
     }
 
     pub fn open(&self, flags: fcall::LOpenFlags) -> Result<(), std::io::Error> {
-        self.client.open(&self.fid, flags)
+        match self.client.fcall(&Fcall::Tlopen(fcall::Tlopen {
+            fid: self.fid.id,
+            flags,
+        }))? {
+            Fcall::Rlopen(fcall::Rlopen { .. }) => Ok(()),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
     }
 
     pub fn read_dir(&self) -> Result<Vec<fcall::DirEntry<'static>>, std::io::Error> {
         if !self.is_dir() {
             return Err(err_not_dir());
         }
-        self.client.read_dir(&self.fid)
+        let count: u32 = self.client.state.msize as u32 - fcall::READDIRHDRSZ;
+        let mut offset: u64 = 0;
+        let mut entries: Vec<fcall::DirEntry> = Vec::new();
+        'read_all: loop {
+            match self.client.fcall(&Fcall::Treaddir(fcall::Treaddir {
+                fid: self.fid.id,
+                offset,
+                count,
+            }))? {
+                Fcall::Rreaddir(fcall::Rreaddir { mut data }) => {
+                    if data.data.is_empty() {
+                        break 'read_all;
+                    }
+                    entries.append(&mut data.data);
+                    offset = entries.last().unwrap().offset;
+                }
+                Fcall::Rlerror(err) => return Err(err.into_io_error()),
+                _ => return Err(err_unexpected_response()),
+            }
+        }
+        Ok(entries)
     }
 
-    pub fn close(mut self) -> Result<(), std::io::Error> {
-        self.client.clunk(&self.fid)?;
-        self.fid.id = fcall::NOFID;
-        Ok(())
+    pub fn close(&mut self) -> Result<(), std::io::Error> {
+        match self
+            .client
+            .fcall(&Fcall::Tclunk(fcall::Tclunk { fid: self.fid.id }))?
+        {
+            Fcall::Rclunk { .. } => {
+                self.fid.id = fcall::NOFID;
+                Ok(())
+            }
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
     }
 }
 
 impl Drop for DotlFile {
     fn drop(&mut self) {
         if self.fid.id != fcall::NOFID {
-            let _ = self.client.clunk(&self.fid);
+            let _ = self.close();
         }
     }
 }
 
 impl Read for DotlFile {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = self.client.read(&self.fid, self.offset, buf)?;
-        self.offset += n as u64;
-        Ok(n)
+        let count = buf
+            .len()
+            .min((self.client.state.msize - fcall::IOHDRSZ) as usize) as u32;
+        match self.client.fcall(&Fcall::Tread(fcall::Tread {
+            fid: self.fid.id,
+            offset: self.offset,
+            count,
+        }))? {
+            Fcall::Rread(fcall::Rread { data }) => {
+                buf.copy_from_slice(&data[..]);
+                self.offset += data.len() as u64;
+                Ok(data.len())
+            }
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
     }
 }
 
 impl Write for DotlFile {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let n = self.client.write(&self.fid, self.offset, buf)?;
-        self.offset += n as u64;
-        Ok(n)
+        let count = buf
+            .len()
+            .min((self.client.state.msize - fcall::IOHDRSZ) as usize);
+        match self.client.fcall(&Fcall::Twrite(fcall::Twrite {
+            fid: self.fid.id,
+            offset: self.offset,
+            data: Cow::from(&buf[..count]),
+        }))? {
+            Fcall::Rwrite(fcall::Rwrite { count }) => {
+                self.offset += count as u64;
+                Ok(count as usize)
+            }
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.client.fsync(&self.fid)
+        match self
+            .client
+            .fcall(&Fcall::Tfsync(fcall::Tfsync { fid: self.fid.id }))?
+        {
+            Fcall::Rfsync { .. } => Ok(()),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
     }
 }
