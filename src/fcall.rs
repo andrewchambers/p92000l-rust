@@ -36,6 +36,17 @@ pub const READDIRHDRSZ: u32 = 24;
 pub const MAXWELEM: usize = 13;
 
 bitflags! {
+    /// Flags passed to Tlopen.
+    pub struct LOpenFlags: u32 {
+        const O_RDONLY    = 0;
+        const O_WRONLY    = 1;
+        const O_RDWR    = 2;
+        const O_CREAT = 0o100;
+        const O_TRUNC = 0o1000;
+    }
+}
+
+bitflags! {
     /// File lock type, Flock.typ
     pub struct LockType: u8 {
         const RDLOCK    = 0;
@@ -494,7 +505,7 @@ pub struct Rstatfs {
 #[derive(Clone, Debug)]
 pub struct Tlopen {
     pub fid: u32,
-    pub flags: u32,
+    pub flags: LOpenFlags,
 }
 
 #[derive(Clone, Debug)]
@@ -1682,7 +1693,7 @@ fn encode_rstatfs<W: Write>(w: &mut W, v: &Rstatfs) -> std::io::Result<()> {
 }
 fn encode_tlopen<W: Write>(w: &mut W, v: &Tlopen) -> std::io::Result<()> {
     encode_u32(w, v.fid)?;
-    encode_u32(w, v.flags)?;
+    encode_u32(w, v.flags.bits())?;
     Ok(())
 }
 fn encode_rlopen<W: Write>(w: &mut W, v: &Rlopen) -> std::io::Result<()> {
@@ -2294,7 +2305,7 @@ impl<'a, 'b: 'a> Decoder<'b> {
     fn decode_tlopen(&mut self) -> std::io::Result<Tlopen> {
         Ok(Tlopen {
             fid: self.decode_u32()?,
-            flags: self.decode_u32()?,
+            flags: LOpenFlags::from_bits_truncate(self.decode_u32()?),
         })
     }
 

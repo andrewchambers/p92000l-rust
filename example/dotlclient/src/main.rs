@@ -1,4 +1,5 @@
 use p92000::client;
+use p92000::fcall::LOpenFlags;
 // use std::io::{Read, Write};
 use std::net::TcpStream;
 
@@ -8,10 +9,11 @@ fn main() {
 
     let f = client.attach(0, "ac", "/tmp").unwrap();
 
-    f.open(0).unwrap();
+    f.open(LOpenFlags::O_RDONLY).unwrap();
 
-    dbg!(f.read_dir_at("/").unwrap());
-
+    let f = f.walk("derp").unwrap();
+    f.open(LOpenFlags::O_RDONLY).unwrap();
+    dbg!(f.read_dir().unwrap());
     f.close().unwrap();
 
     println!("good bye!");

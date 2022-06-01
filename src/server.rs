@@ -14,7 +14,7 @@ pub trait DotlFilesystem {
         })
     }
 
-    fn lopen(&self, _: &mut Self::Fid, _flags: u32) -> Result<Rlopen, Rlerror> {
+    fn lopen(&self, _: &mut Self::Fid, _flags: fcall::LOpenFlags) -> Result<Rlopen, Rlerror> {
         Err(Rlerror {
             ecode: lerrno::EOPNOTSUPP,
         })
