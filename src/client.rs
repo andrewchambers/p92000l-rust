@@ -388,7 +388,7 @@ impl Fid {
         Ok(entries)
     }
 
-    pub fn read(&mut self, offset: u64, buf: &mut [u8]) -> std::io::Result<usize> {
+    pub fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         let count = buf
             .len()
             .min((self.client.state.msize - fcall::IOHDRSZ) as usize) as u32;
@@ -406,7 +406,7 @@ impl Fid {
         }
     }
 
-    pub fn write(&mut self, offset: u64, buf: &[u8]) -> std::io::Result<usize> {
+    pub fn write(&self, offset: u64, buf: &[u8]) -> Result<usize, std::io::Error> {
         let count = buf
             .len()
             .min((self.client.state.msize - fcall::IOHDRSZ) as usize);
@@ -421,7 +421,90 @@ impl Fid {
         }
     }
 
-    pub fn fsync(&mut self) -> std::io::Result<()> {
+    pub fn mkdir(&self, name: &str, mode: u32, gid: u32) -> Result<fcall::Qid, std::io::Error> {
+        match self.client.fcall(Fcall::Tmkdir(fcall::Tmkdir {
+            dfid: self.id,
+            name: Cow::from(name),
+            mode,
+            gid,
+        }))? {
+            Fcall::Rmkdir(fcall::Rmkdir { qid }) => Ok(qid),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    // XXX make flags an bigflag set?
+    pub fn unlinkat(&self, name: &str, flags: u32) -> Result<(), std::io::Error> {
+        match self.client.fcall(Fcall::Tunlinkat(fcall::Tunlinkat {
+            dfid: self.id,
+            name: Cow::from(name),
+            flags,
+        }))? {
+            Fcall::Runlinkat(fcall::Runlinkat { .. }) => Ok(()),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    pub fn rename(&self, dir_fid: &Fid, name: &str) -> Result<(), std::io::Error> {
+        match self.client.fcall(Fcall::Trename(fcall::Trename {
+            fid: self.id,
+            dfid: dir_fid.id,
+            name: Cow::from(name),
+        }))? {
+            Fcall::Rrename(fcall::Rrename { .. }) => Ok(()),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    pub fn renameat(
+        &self,
+        oldname: &str,
+        new_dir_fid: &Fid,
+        newname: &str,
+    ) -> Result<(), std::io::Error> {
+        match self.client.fcall(Fcall::Trenameat(fcall::Trenameat {
+            olddfid: self.id,
+            newdfid: new_dir_fid.id,
+            oldname: Cow::from(oldname),
+            newname: Cow::from(newname),
+        }))? {
+            Fcall::Rrenameat(fcall::Rrenameat { .. }) => Ok(()),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    pub fn getattr(&self, mask: fcall::GetattrMask) -> Result<fcall::Rgetattr, std::io::Error> {
+        match self.client.fcall(Fcall::Tgetattr(fcall::Tgetattr {
+            fid: self.id,
+            req_mask: mask,
+        }))? {
+            Fcall::Rgetattr(resp) => Ok(resp),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    pub fn setattr(
+        &self,
+        valid: fcall::SetattrMask,
+        stat: &fcall::SetAttr,
+    ) -> Result<(), std::io::Error> {
+        match self.client.fcall(Fcall::Tsetattr(fcall::Tsetattr {
+            fid: self.id,
+            valid,
+            stat: *stat,
+        }))? {
+            Fcall::Rsetattr(fcall::Rsetattr { .. }) => Ok(()),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    pub fn fsync(&self) -> Result<(), std::io::Error> {
         match self
             .client
             .fcall(Fcall::Tfsync(fcall::Tfsync { fid: self.id }))?
@@ -451,6 +534,20 @@ impl Fid {
 
     pub fn clunk(mut self) -> Result<(), std::io::Error> {
         self._clunk()
+    }
+
+    pub fn remove(mut self) -> Result<(), std::io::Error> {
+        match self
+            .client
+            .fcall(Fcall::Tremove(fcall::Tremove { fid: self.id }))?
+        {
+            Fcall::Rremove { .. } => {
+                self.needs_clunk = false;
+                Ok(())
+            }
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
     }
 }
 

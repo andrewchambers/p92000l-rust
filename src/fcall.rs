@@ -1435,7 +1435,7 @@ pub fn write<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &TaggedFcall) -> std::
     match msg {
         TaggedFcall {
             tag,
-            fcall: Fcall::Rread(Rread { ref data }),
+            fcall: Fcall::Rread(Rread { data }),
         } => {
             // Zero copy Rread path.
             let sz = 4 + 1 + 2 + 4 + data.len();
@@ -1450,25 +1450,42 @@ pub fn write<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &TaggedFcall) -> std::
             encode_u16(&mut cursor, *tag)?;
             encode_u32(&mut cursor, data.len() as u32)?;
             let buf = cursor.into_inner();
-            // XXX vectored write?
+            // XXX: Could be a vectored write here?
             w.write_all(&buf[..])?;
             w.write_all(&data[..])?;
             Ok(())
         }
-        /* XXX Zero copy Twrite path.
         TaggedFcall {
             tag,
-            fcall: Fcall::Twrite(Twrite { ref data }),
+            fcall: Fcall::Twrite(Twrite { fid, offset, data }),
         } => {
+            // Zero copy Twrite path.
+            let sz = 4 + 1 + 2 + 4 + 8 + 4 + data.len();
+            if sz > buf.capacity() {
+                // The message was larger than the buffer.
+                // This must be larger than msize so flag the mistake.
+                return Err(invalid_9p_msg());
+            }
+            let mut cursor = std::io::Cursor::new(buf);
+            encode_u32(&mut cursor, sz as u32)?;
+            encode_u8(&mut cursor, 117)?;
+            encode_u16(&mut cursor, *tag)?;
+            encode_u32(&mut cursor, *fid)?;
+            encode_u64(&mut cursor, *offset)?;
+            encode_u32(&mut cursor, data.len() as u32)?;
+            let buf = cursor.into_inner();
+            // XXX: Could be a vectored write here?
+            w.write_all(&buf[..])?;
+            w.write_all(&data[..])?;
+            Ok(())
         }
-        */
         msg => {
             // Slow path, encode the whole message to the buffer then write it.
             let mut cursor = std::io::Cursor::new(buf);
             encode(&mut cursor, msg)?;
             let buf = cursor.into_inner();
-            // XXX vectored write or single write here?
             let sz_bytes = &((buf.len() + 4) as u32).to_le_bytes()[..];
+            // XXX: Could be a vectored write here?
             w.write_all(sz_bytes)?;
             w.write_all(&buf[..])?;
             Ok(())
