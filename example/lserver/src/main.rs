@@ -46,7 +46,7 @@ pub fn get_dirent(entry: &fs::DirEntry, offset: u64) -> std::io::Result<fcall::D
 }
 
 // An example filesystem doing many things inefficient but simple ways.
-impl p92000::server::DotlFilesystem for RoExport {
+impl p92000::lserver::Filesystem for RoExport {
     type Fid = RoFid;
 
     fn attach(
@@ -115,7 +115,11 @@ impl p92000::server::DotlFilesystem for RoExport {
         ))
     }
 
-    fn lopen(&self, fid: &mut Self::Fid, _flags: u32) -> Result<fcall::Rlopen, fcall::Rlerror> {
+    fn lopen(
+        &self,
+        fid: &mut Self::Fid,
+        _flags: fcall::LOpenFlags,
+    ) -> Result<fcall::Rlopen, fcall::Rlerror> {
         Ok(fcall::Rlopen {
             qid: fid.qid,
             iounit: 0,
@@ -185,6 +189,6 @@ fn main() {
     for stream in listener.incoming() {
         let mut stream1 = stream.unwrap();
         let mut stream2 = stream1.try_clone().unwrap();
-        p92000::server::serve_dotl_single_threaded(&mut stream1, &mut stream2, &mut fs);
+        p92000::lserver::serve_single_threaded(&mut stream1, &mut stream2, &mut fs);
     }
 }

@@ -151,7 +151,7 @@ struct ClientWriteState {
     buf: Vec<u8>,
 }
 
-struct DotlClientState {
+struct ClientState {
     msize: u32,
     fids: Fidset,
     fcalls: InflightFcalls,
@@ -161,7 +161,7 @@ struct DotlClientState {
     read_worker_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-impl Drop for DotlClientState {
+impl Drop for ClientState {
     fn drop(&mut self) {
         let write_state = self.write_state.lock().unwrap();
         write_state.w.shutdown(std::net::Shutdown::Both).unwrap();
@@ -173,12 +173,12 @@ impl Drop for DotlClientState {
 }
 
 #[derive(Clone)]
-pub struct DotlClient {
-    state: Arc<DotlClientState>,
+pub struct Client {
+    state: Arc<ClientState>,
 }
 
-impl DotlClient {
-    pub fn tcp(conn: TcpStream, bufsize: usize) -> Result<DotlClient, std::io::Error> {
+impl Client {
+    pub fn tcp(conn: TcpStream, bufsize: usize) -> Result<Client, std::io::Error> {
         let mut r = conn;
         let mut w = r.try_clone()?;
 
@@ -219,11 +219,11 @@ impl DotlClient {
 
         let worker_fcalls = fcalls.clone();
         let read_worker_handle = thread::spawn(move || {
-            DotlClient::read_worker(r, rbuf, worker_fcalls);
+            Client::read_worker(r, rbuf, worker_fcalls);
         });
 
-        Ok(DotlClient {
-            state: Arc::new(DotlClientState {
+        Ok(Client {
+            state: Arc::new(ClientState {
                 msize: bufsize.try_into().unwrap(),
                 fids: Fidset::new(),
                 write_state: Mutex::new(ClientWriteState { w, buf: wbuf }),
@@ -303,7 +303,7 @@ impl DotlClient {
 }
 
 pub struct Fid {
-    client: DotlClient,
+    client: Client,
     needs_clunk: bool,
     id: u32,
 }
