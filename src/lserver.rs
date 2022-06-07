@@ -24,7 +24,7 @@ pub trait Filesystem {
         &self,
         _: &mut Self::Fid,
         _name: &str,
-        _flags: u32,
+        _flags: fcall::LOpenFlags,
         _mode: u32,
         _gid: u32,
     ) -> Result<Rlcreate, Rlerror> {

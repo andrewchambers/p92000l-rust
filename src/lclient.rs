@@ -164,7 +164,7 @@ struct ClientState {
 impl Drop for ClientState {
     fn drop(&mut self) {
         let write_state = self.write_state.lock().unwrap();
-        write_state.w.shutdown(std::net::Shutdown::Both).unwrap();
+        let _ = write_state.w.shutdown(std::net::Shutdown::Both);
         drop(write_state);
         if let Some(read_worker_handle) = self.read_worker_handle.take() {
             let _ = read_worker_handle.join();
@@ -350,12 +350,26 @@ impl Fid {
         Ok((wqids, f.unwrap()))
     }
 
-    pub fn open(&self, flags: fcall::LOpenFlags) -> Result<(), std::io::Error> {
+    pub fn open(&self, flags: fcall::LOpenFlags) -> Result<fcall::Qid, std::io::Error> {
         match self.client.fcall(Fcall::Tlopen(fcall::Tlopen {
             fid: self.id,
             flags,
         }))? {
-            Fcall::Rlopen(fcall::Rlopen { .. }) => Ok(()),
+            Fcall::Rlopen(fcall::Rlopen { qid, .. }) => Ok(qid),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    pub fn create(&self, name: &str, flags: fcall::LOpenFlags, mode: u32, gid: u32) -> Result<fcall::Qid, std::io::Error> {
+        match self.client.fcall(Fcall::Tlcreate(fcall::Tlcreate {
+            fid: self.id,
+            flags,
+            mode,
+            gid,
+            name: Cow::from(name),
+        }))? {
+            Fcall::Rlcreate(fcall::Rlcreate { qid, .. }) => Ok(qid),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }
@@ -398,7 +412,10 @@ impl Fid {
             count,
         }))? {
             Fcall::Rread(fcall::Rread { data }) => {
-                buf.copy_from_slice(&data[..]);
+                if !data.is_empty() {
+                    let dest = &mut buf[..data.len()];
+                    dest.copy_from_slice(&data);
+                }
                 Ok(data.len())
             }
             Fcall::Rlerror(err) => Err(err.into_io_error()),
@@ -491,12 +508,12 @@ impl Fid {
     pub fn setattr(
         &self,
         valid: fcall::SetattrMask,
-        stat: &fcall::SetAttr,
+        stat: fcall::SetAttr,
     ) -> Result<(), std::io::Error> {
         match self.client.fcall(Fcall::Tsetattr(fcall::Tsetattr {
             fid: self.id,
             valid,
-            stat: *stat,
+            stat,
         }))? {
             Fcall::Rsetattr(fcall::Rsetattr { .. }) => Ok(()),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
@@ -527,6 +544,17 @@ impl Fid {
                 self.needs_clunk = false;
                 Ok(())
             }
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
+    pub fn lock(&mut self, flock: fcall::Flock) -> Result<fcall::LockStatus, std::io::Error> {
+        match self.client.fcall(Fcall::Tlock(fcall::Tlock {
+            fid: self.id,
+            flock,
+        }))? {
+            Fcall::Rlock(fcall::Rlock { status }) => Ok(status),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }

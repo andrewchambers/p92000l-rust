@@ -41,7 +41,7 @@ bitflags! {
         const O_RDONLY    = 0;
         const O_WRONLY    = 1;
         const O_RDWR    = 2;
-        const O_CREAT = 0o100;
+        const O_EXCL = 0o200;
         const O_TRUNC = 0o1000;
     }
 }
@@ -518,7 +518,7 @@ pub struct Rlopen {
 pub struct Tlcreate<'a> {
     pub fid: u32,
     pub name: Cow<'a, str>,
-    pub flags: u32,
+    pub flags: LOpenFlags,
     pub mode: u32,
     pub gid: u32,
 }
@@ -1468,7 +1468,7 @@ pub fn write<W: Write>(w: &mut W, buf: &mut Vec<u8>, msg: &TaggedFcall) -> std::
             }
             let mut cursor = std::io::Cursor::new(buf);
             encode_u32(&mut cursor, sz as u32)?;
-            encode_u8(&mut cursor, 117)?;
+            encode_u8(&mut cursor, 118)?;
             encode_u16(&mut cursor, *tag)?;
             encode_u32(&mut cursor, *fid)?;
             encode_u64(&mut cursor, *offset)?;
@@ -1625,11 +1625,13 @@ fn encode_statfs<W: Write>(w: &mut W, v: &Statfs) -> std::io::Result<()> {
     encode_u32(w, v.namelen)?;
     Ok(())
 }
+
 fn encode_time<W: Write>(w: &mut W, v: &Time) -> std::io::Result<()> {
     encode_u64(w, v.sec)?;
     encode_u64(w, v.nsec)?;
     Ok(())
 }
+
 fn encode_stat<W: Write>(w: &mut W, v: &Stat) -> std::io::Result<()> {
     encode_u32(w, v.mode)?;
     encode_u32(w, v.uid)?;
@@ -1647,6 +1649,7 @@ fn encode_stat<W: Write>(w: &mut W, v: &Stat) -> std::io::Result<()> {
     encode_u64(w, v.data_version)?;
     Ok(())
 }
+
 fn encode_setattr<W: Write>(w: &mut W, v: &SetAttr) -> std::io::Result<()> {
     encode_u32(w, v.mode)?;
     encode_u32(w, v.uid)?;
@@ -1656,6 +1659,7 @@ fn encode_setattr<W: Write>(w: &mut W, v: &SetAttr) -> std::io::Result<()> {
     encode_time(w, &v.mtime)?;
     Ok(())
 }
+
 fn encode_direntry<'a, W: Write>(w: &mut W, v: &DirEntry<'a>) -> std::io::Result<()> {
     encode_qid(w, &v.qid)?;
     encode_u64(w, v.offset)?;
@@ -1721,7 +1725,7 @@ fn encode_rlopen<W: Write>(w: &mut W, v: &Rlopen) -> std::io::Result<()> {
 fn encode_tlcreate<'a, W: Write>(w: &'a mut W, v: &Tlcreate<'a>) -> std::io::Result<()> {
     encode_u32(w, v.fid)?;
     encode_str(w, &v.name)?;
-    encode_u32(w, v.flags)?;
+    encode_u32(w, v.flags.bits())?;
     encode_u32(w, v.mode)?;
     encode_u32(w, v.gid)?;
     Ok(())
@@ -2337,7 +2341,7 @@ impl<'a, 'b: 'a> Decoder<'b> {
         Ok(Tlcreate {
             fid: self.decode_u32()?,
             name: self.decode_str()?,
-            flags: self.decode_u32()?,
+            flags: LOpenFlags::from_bits_truncate(self.decode_u32()?),
             mode: self.decode_u32()?,
             gid: self.decode_u32()?,
         })
