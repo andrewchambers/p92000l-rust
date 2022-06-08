@@ -29,46 +29,39 @@ struct FidsetInner {
     next: u32,
 }
 
-impl FidsetInner {
-    fn new() -> FidsetInner {
-        FidsetInner {
-            set: HashSet::new(),
-            next: fcall::NOFID,
-        }
-    }
-
-    fn fresh_id(&mut self) -> Option<u32> {
-        if self.set.len() == (fcall::NOFID - 1) as usize {
-            return None;
-        }
-        loop {
-            if self.next == fcall::NOFID {
-                self.next = 0;
-            } else {
-                self.next += 1;
-            }
-            if !self.set.contains(&self.next) {
-                let id = self.next;
-                self.set.insert(id);
-                return Some(id);
-            }
-        }
-    }
-}
-
 struct Fidset {
     inner: Arc<Mutex<FidsetInner>>,
 }
 
 impl Fidset {
     fn new() -> Fidset {
+        let inner = FidsetInner {
+            set: HashSet::new(),
+            next: fcall::NOFID,
+        };
         Fidset {
-            inner: Arc::new(Mutex::new(FidsetInner::new())),
+            inner: Arc::new(Mutex::new(inner)),
         }
     }
 
     fn fresh_id(&self) -> Option<u32> {
-        self.inner.lock().unwrap().fresh_id()
+        let mut inner = self.inner.lock().unwrap();
+
+        if inner.set.len() == fcall::NOFID as usize {
+            return None;
+        }
+        loop {
+            if inner.next == fcall::NOFID {
+                inner.next = 0;
+            } else {
+                inner.next += 1;
+            }
+            if !inner.set.contains(&inner.next) {
+                let id = inner.next;
+                inner.set.insert(id);
+                return Some(id);
+            }
+        }
     }
 }
 
@@ -78,71 +71,64 @@ struct InflightFcallsInner {
     next_tag: u16,
 }
 
-impl InflightFcallsInner {
-    fn new() -> InflightFcallsInner {
-        InflightFcallsInner {
+#[derive(Clone)]
+struct InflightFcalls {
+    inner_and_cvar: Arc<(Mutex<InflightFcallsInner>, std::sync::Condvar)>,
+}
+
+impl InflightFcalls {
+    fn new() -> InflightFcalls {
+        let inner = InflightFcallsInner {
             disconnected: false,
             map: HashMap::new(),
             next_tag: fcall::NOTAG,
+        };
+        InflightFcalls {
+            inner_and_cvar: Arc::new((Mutex::new(inner), std::sync::Condvar::new())),
         }
     }
 
-    fn mark_disconnected(&mut self) {
+    fn mark_disconnected(&self) {
+        let (ref inner, ref cvar) = self.inner_and_cvar.as_ref();
+        let mut inner = inner.lock().unwrap();
         // Trigger EIO for listeners.
-        self.map.clear();
-        self.disconnected = true;
+        inner.map.clear();
+        inner.disconnected = true;
+        cvar.notify_all();
     }
 
-    fn add(&mut self, respond_to: channel::Sender<Fcall<'static>>) -> Result<u16, std::io::Error> {
-        if self.disconnected {
+    fn add(&self, respond_to: channel::Sender<Fcall<'static>>) -> Result<u16, std::io::Error> {
+        let (ref inner, ref cvar) = self.inner_and_cvar.as_ref();
+        let mut inner = inner.lock().unwrap();
+
+        // Use condvar to wait until there is a free tag.
+        while !inner.disconnected && inner.map.len() == fcall::NOTAG as usize {
+            inner = cvar.wait(inner).unwrap();
+        }
+
+        if inner.disconnected {
             return Err(err_other("disconnected"));
         };
 
-        if self.map.len() == (fcall::NOTAG - 1) as usize {
-            return Err(err_other("tags exhausted"));
-        }
-
         loop {
-            if self.next_tag == fcall::NOTAG {
-                self.next_tag = 0;
+            if inner.next_tag == fcall::NOTAG {
+                inner.next_tag = 0;
             } else {
-                self.next_tag += 1;
+                inner.next_tag += 1;
             }
-            if !self.map.contains_key(&self.next_tag) {
-                let tag = self.next_tag;
-                self.map.insert(tag, respond_to);
+            if !inner.map.contains_key(&inner.next_tag) {
+                let tag = inner.next_tag;
+                inner.map.insert(tag, respond_to);
                 return Ok(tag);
             }
         }
     }
 
-    fn remove(&mut self, tag: u16) -> Option<channel::Sender<Fcall<'static>>> {
-        self.map.remove(&tag)
-    }
-}
-
-#[derive(Clone)]
-struct InflightFcalls {
-    inner: Arc<Mutex<InflightFcallsInner>>,
-}
-
-impl InflightFcalls {
-    fn new() -> InflightFcalls {
-        InflightFcalls {
-            inner: Arc::new(Mutex::new(InflightFcallsInner::new())),
-        }
-    }
-
-    fn mark_disconnected(&self) {
-        self.inner.lock().unwrap().mark_disconnected()
-    }
-
-    fn add(&self, respond_to: channel::Sender<Fcall<'static>>) -> Result<u16, std::io::Error> {
-        self.inner.lock().unwrap().add(respond_to)
-    }
-
     fn remove(&self, tag: u16) -> Option<channel::Sender<Fcall<'static>>> {
-        self.inner.lock().unwrap().remove(tag)
+        let (ref inner, ref cvar) = self.inner_and_cvar.as_ref();
+        let mut inner = inner.lock().unwrap();
+        cvar.notify_one();
+        inner.map.remove(&tag)
     }
 }
 
@@ -266,14 +252,9 @@ impl Client {
         let write_state = write_state_guard.deref_mut();
         let w = &mut write_state.w;
         let buf = &mut write_state.buf;
-        fcall::write(
-            w,
-            buf,
-            &TaggedFcall {
-                tag: self.state.fcalls.add(tx)?,
-                fcall,
-            },
-        )?;
+        // Will block until a tag is free.
+        let tag = self.state.fcalls.add(tx)?;
+        fcall::write(w, buf, &TaggedFcall { tag, fcall })?;
         drop(write_state_guard);
         rx.recv().or_else(err_io_result)
     }
@@ -361,7 +342,13 @@ impl Fid {
         }
     }
 
-    pub fn create(&self, name: &str, flags: fcall::LOpenFlags, mode: u32, gid: u32) -> Result<fcall::Qid, std::io::Error> {
+    pub fn create(
+        &self,
+        name: &str,
+        flags: fcall::LOpenFlags,
+        mode: u32,
+        gid: u32,
+    ) -> Result<fcall::Qid, std::io::Error> {
         match self.client.fcall(Fcall::Tlcreate(fcall::Tlcreate {
             fid: self.id,
             flags,
