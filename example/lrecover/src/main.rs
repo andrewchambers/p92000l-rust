@@ -1,3 +1,4 @@
+use log::{debug, error, info, log_enabled, Level};
 use p92000::fcall;
 use p92000::fcall::Fcall;
 use p92000::lerrno;
@@ -135,7 +136,7 @@ impl ShadowServerState {
 
 fn initial_connect(
     mut client_conn: TcpStream,
-    server_addr: &str,
+    server_addr: String,
 ) -> Result<ProxyState, std::io::Error> {
     let mut bufsize = 8192;
     let mut rbuf = Vec::with_capacity(bufsize);
@@ -149,15 +150,18 @@ fn initial_connect(
         _ => todo!(),
     };
 
+    info!("establishing initial connection to {}", &server_addr);
+
     let mut first_attempt = true;
     loop {
         if first_attempt {
             first_attempt = false;
         } else {
             std::thread::sleep(std::time::Duration::from_millis(1000));
+            error!("retrying initial connection to {}", &server_addr);
         }
 
-        let mut server_conn = match TcpStream::connect(server_addr) {
+        let mut server_conn = match TcpStream::connect(&server_addr) {
             Ok(conn) => conn,
             Err(_) => continue,
         };
@@ -197,8 +201,8 @@ fn initial_connect(
         )?;
 
         return Ok(ProxyState {
-            server_addr: server_addr.to_string(),
             server_state: Arc::new(Mutex::new(ShadowServerState::new())),
+            server_addr,
             rversion,
             client_conn,
             server_conn,
@@ -220,7 +224,8 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
     let io_worker = std::thread::spawn(move || loop {
         let tagged_fcall = match fcall::read(&mut worker_server_conn, &mut rbuf) {
             Ok(tagged_fcall) => tagged_fcall,
-            Err(_) => {
+            Err(err) => {
+                error!("error reading from server: {}", err);
                 let _ = worker_server_conn.shutdown(std::net::Shutdown::Both);
                 break;
             }
@@ -233,7 +238,8 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
 
         match fcall::write(&mut worker_client_conn, &mut wbuf, &tagged_fcall) {
             Ok(_) => (),
-            Err(_) => {
+            Err(err) => {
+                error!("error writing to client: {}", err);
                 let _ = worker_server_conn.shutdown(std::net::Shutdown::Both);
                 let _ = worker_client_conn.shutdown(std::net::Shutdown::Both);
                 break;
@@ -248,6 +254,7 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
         let tagged_fcall = match fcall::read(&mut state.client_conn, &mut rbuf) {
             Ok(tagged_fcall) => tagged_fcall,
             Err(err) => {
+                error!("error reading from client: {}", err);
                 let _ = state.server_conn.shutdown(std::net::Shutdown::Both);
                 let _ = state.client_conn.shutdown(std::net::Shutdown::Both);
                 io_worker.join().unwrap();
@@ -262,7 +269,8 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
 
         match fcall::write(&mut state.server_conn, &mut wbuf, &tagged_fcall) {
             Ok(_) => (),
-            Err(_) => {
+            Err(err) => {
+                error!("error writing to server: {}", err);
                 let _ = state.server_conn.shutdown(std::net::Shutdown::Both);
                 io_worker.join().unwrap();
                 return Ok(());
@@ -274,11 +282,12 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
 fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
     let mut rbuf = Vec::with_capacity(state.rversion.msize as usize);
     let mut wbuf = Vec::with_capacity(state.rversion.msize as usize);
-    // Answer all in flight calls expecting a response with an error.
 
     let mut server_state = state.server_state.lock().unwrap();
 
+    // Answer remaining in flight calls expecting a response with an error.
     for (tag, _) in server_state.inflight_tags.drain() {
+        debug!("cancelling inflight tag {} with EIO", tag);
         fcall::write(
             &mut state.client_conn,
             &mut wbuf,
@@ -296,14 +305,18 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
         } else {
             std::thread::sleep(std::time::Duration::from_millis(1000));
         }
+        info!("attempting to reconnect to {}", &state.server_addr);
 
         state.server_conn = match TcpStream::connect(&state.server_addr) {
             Ok(conn) => conn,
-            Err(_) => continue,
+            Err(err) => {
+                error!("reconnect to {} failed: {}", &state.server_addr, err);
+                continue;
+            }
         };
 
         // Resend the version, use the rversion we initially got.
-        if fcall::write(
+        if let Err(err) = fcall::write(
             &mut state.server_conn,
             &mut wbuf,
             &fcall::TaggedFcall {
@@ -313,9 +326,8 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
                     version: state.rversion.version.clone(),
                 }),
             },
-        )
-        .is_err()
-        {
+        ) {
+            error!("writing Tversion to {} failed: {}", &state.server_addr, err);
             continue;
         }
 
@@ -334,7 +346,12 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
 
         // Restablish attach fids.
         for (fid, tattach) in server_state.attach_fids.iter() {
-            if fcall::write(
+            info!(
+                "sending Tattach to {} with aname={}",
+                state.server_addr, &tattach.aname
+            );
+
+            if let Err(err) = fcall::write(
                 &mut state.server_conn,
                 &mut wbuf,
                 &fcall::TaggedFcall {
@@ -344,9 +361,8 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
                         ..tattach.clone()
                     }),
                 },
-            )
-            .is_err()
-            {
+            ) {
+                error!("sending Tattach to {} failed: {}", state.server_addr, err);
                 continue;
             }
 
@@ -359,11 +375,12 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
             };
         }
 
+        info!("reconnected to {}", &state.server_addr);
         return Ok(());
     }
 }
 
-fn handle_connection(client_conn: TcpStream, server_addr: &str) -> Result<(), std::io::Error> {
+fn handle_connection(client_conn: TcpStream, server_addr: String) -> Result<(), std::io::Error> {
     let mut state = initial_connect(client_conn, server_addr)?;
     loop {
         proxy_connection(&mut state)?;
@@ -371,15 +388,79 @@ fn handle_connection(client_conn: TcpStream, server_addr: &str) -> Result<(), st
     }
 }
 
-fn main() {
-    let listen_addr = "127.0.0.1:5031";
-    let server_addr = "127.0.0.1:5030";
+fn usage(program: &str, opts: getopts::Options) {
+    let brief = format!(
+        "reconnect9 - Proxy 9p connections with automatic reconnection.\n\n\
+        Usage: {} --proxy-from --proxy-to",
+        program
+    );
+    print!("{}", opts.usage(&brief));
+    std::process::exit(1);
+}
 
-    let listener = TcpListener::bind(listen_addr).unwrap();
+fn main() {
+    let mut log_builder = env_logger::Builder::new();
+    log_builder.filter_level(log::LevelFilter::Info);
+    log_builder.parse_env("RECONNECT9_LOG");
+    log_builder.init();
+
+    let args: Vec<String> = std::env::args().collect();
+    let program = args[0].clone();
+
+    let mut opts = getopts::Options::new();
+    opts.optopt(
+        "f",
+        "from",
+        "Proxy 9p connections from this local address (default localhost:5030).",
+        "ADDR:PORT",
+    );
+    opts.optopt(
+        "t",
+        "to",
+        "Proxy 9p connections to this address.",
+        "ADDR:PORT",
+    );
+    opts.optflag("h", "help", "print this help menu");
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(err) => {
+            eprintln!("{}: {}", program, err);
+            std::process::exit(1)
+        }
+    };
+
+    if matches.opt_present("h") {
+        usage(&program, opts);
+    }
+
+    if !matches.opt_present("t") {
+        eprintln!("{}: missing --to option", program);
+        std::process::exit(1)
+    }
+
+    let listen_addr = matches
+        .opt_str("from")
+        .unwrap_or("localhost:5030".to_string());
+    let server_addr = matches
+        .opt_str("to")
+        .unwrap_or("localhost:5031".to_string());
+
+    info!("listening on {}, proxying to {}", listen_addr, server_addr);
+    let listener = match TcpListener::bind(listen_addr) {
+        Ok(l) => l,
+        Err(err) => {
+            error!("listening failed - {}", err);
+            std::process::exit(1)
+        }
+    };
 
     for incoming in listener.incoming() {
         let client_conn = incoming.unwrap();
+        let server_addr = server_addr.to_string();
         let _ = std::thread::spawn(move || {
+            if let Ok(peer) = client_conn.peer_addr() {
+                info!("new connection from {}", peer);
+            }
             let _ = handle_connection(client_conn, server_addr);
         });
     }
