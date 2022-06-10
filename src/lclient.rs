@@ -534,12 +534,12 @@ impl Fid {
         if !self.needs_clunk {
             return Ok(());
         }
+        self.needs_clunk = false;
         match self
             .client
             .fcall(Fcall::Tclunk(fcall::Tclunk { fid: self.id }))?
         {
             Fcall::Rclunk { .. } => {
-                self.needs_clunk = false;
                 Ok(())
             }
             Fcall::Rlerror(err) => Err(err.into_io_error()),
@@ -552,12 +552,12 @@ impl Fid {
     }
 
     pub fn remove(mut self) -> Result<(), std::io::Error> {
+        self.needs_clunk = false;
         match self
             .client
             .fcall(Fcall::Tremove(fcall::Tremove { fid: self.id }))?
         {
             Fcall::Rremove { .. } => {
-                self.needs_clunk = false;
                 Ok(())
             }
             Fcall::Rlerror(err) => Err(err.into_io_error()),

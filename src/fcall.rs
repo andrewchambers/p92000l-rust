@@ -244,8 +244,8 @@ impl<'a> DirEntryData<'a> {
     pub fn data(&self) -> &[DirEntry] {
         &self.data
     }
-    pub fn size(&self) -> u32 {
-        self.data.iter().fold(0, |a, e| a + e.size()) as u32
+    pub fn size(&self) -> u64 {
+        self.data.iter().fold(0, |a, e| a + e.size()) as u64
     }
     pub fn push(&mut self, entry: DirEntry<'a>) {
         self.data.push(entry);
@@ -395,8 +395,8 @@ pub struct DirEntry<'a> {
 }
 
 impl<'a> DirEntry<'a> {
-    pub fn size(&self) -> u32 {
-        (13 + 8 + 1 + 2 + self.name.len()) as u32
+    pub fn size(&self) -> u64 {
+        (13 + 8 + 1 + 2 + self.name.len()) as u64
     }
 }
 

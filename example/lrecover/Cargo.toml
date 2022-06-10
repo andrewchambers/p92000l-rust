@@ -1,0 +1,13 @@
+[package]
+name = "lrecover"
+version = "0.0.1"
+authors = [ "andrewchambers <ac@acha.ninja>" ]
+edition = "2021"
+
+[[bin]]
+name = "lrecover"
+
+[dependencies]
+
+[dependencies.p92000]
+path = "../../"
