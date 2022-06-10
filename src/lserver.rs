@@ -2,272 +2,604 @@ use super::fcall;
 use super::fcall::*;
 use super::lerrno;
 use std::borrow::Cow;
-use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::boxed::Box;
+use std::ops::DerefMut;
+use std::sync::{Arc, Mutex};
 
-pub trait Filesystem {
-    type Fid;
+struct WriteState {
+    buf: Vec<u8>,
+    conn: std::net::TcpStream,
+}
 
-    fn statfs(&self, _: &mut Self::Fid) -> Result<Rstatfs, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
+#[derive(Clone)]
+pub struct Response {
+    pub tag: u16,
+    wstate: Arc<Mutex<WriteState>>,
+}
 
-    fn lopen(&self, _: &mut Self::Fid, _flags: fcall::LOpenFlags) -> Result<Rlopen, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn lcreate(
-        &self,
-        _: &mut Self::Fid,
-        _name: &str,
-        _flags: fcall::LOpenFlags,
-        _mode: u32,
-        _gid: u32,
-    ) -> Result<Rlcreate, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn symlink(
-        &self,
-        _: &mut Self::Fid,
-        _name: &str,
-        _sym: &str,
-        _gid: u32,
-    ) -> Result<Rsymlink, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn mknod(
-        &self,
-        _: &mut Self::Fid,
-        _name: &str,
-        _mode: u32,
-        _major: u32,
-        _minor: u32,
-        _gid: u32,
-    ) -> Result<Rmknod, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn rename(
-        &self,
-        _: &mut Self::Fid,
-        _: &mut Self::Fid,
-        _name: &str,
-    ) -> Result<Rrename, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn readlink(&self, _: &mut Self::Fid) -> Result<Rreadlink<'static>, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn getattr(&self, _: &mut Self::Fid, _req_mask: GetattrMask) -> Result<Rgetattr, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn setattr(
-        &self,
-        _: &mut Self::Fid,
-        _valid: SetattrMask,
-        _stat: &SetAttr,
-    ) -> Result<Rsetattr, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn xattrwalk(
-        &self,
-        _: &mut Self::Fid,
-        _: &mut Self::Fid,
-        _name: &str,
-    ) -> Result<Rxattrwalk, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn xattrcreate(
-        &self,
-        _: &mut Self::Fid,
-        _name: &str,
-        _attr_size: u64,
-        _flags: u32,
-    ) -> Result<Rxattrcreate, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn readdir(
-        &self,
-        _: &mut Self::Fid,
-        _offset: u64,
-        _count: u32,
-    ) -> Result<Rreaddir<'static>, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn fsync(&self, _: &mut Self::Fid) -> Result<Rfsync, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn lock(&self, _: &mut Self::Fid, _lock: &Flock) -> Result<Rlock, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn getlock(&self, _: &mut Self::Fid, _lock: &Getlock) -> Result<Rgetlock<'static>, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn link(&self, _: &mut Self::Fid, _: &mut Self::Fid, _name: &str) -> Result<Rlink, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn mkdir(
-        &self,
-        _: &mut Self::Fid,
-        _name: &str,
-        _mode: u32,
-        _gid: u32,
-    ) -> Result<Rmkdir, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn renameat(
-        &self,
-        _: &mut Self::Fid,
-        _oldname: &str,
-        _: &mut Self::Fid,
-        _newname: &str,
-    ) -> Result<Rrenameat, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn unlinkat(&self, _: &mut Self::Fid, _name: &str, _flags: u32) -> Result<Runlinkat, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn auth(
-        &self,
-        _uname: &str,
-        _aname: &str,
-        _n_uname: u32,
-    ) -> Result<(Self::Fid, Rauth), Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn attach(
-        &self,
-        _afid: Option<&mut Self::Fid>,
-        _uname: &str,
-        _aname: &str,
-        _n_uname: u32,
-    ) -> Result<(Self::Fid, Rattach), Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn flush(&self) -> Result<Rflush, Rlerror> {
-        Ok(Rflush {})
-    }
-
-    fn walk(
-        &self,
-        _: &mut Self::Fid,
-        _wnames: &[Cow<'_, str>],
-    ) -> Result<(Option<Self::Fid>, Rwalk), Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn read(&self, _: &mut Self::Fid, _offset: u64, _buf: &mut [u8]) -> Result<usize, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn write(&self, _: &mut Self::Fid, _offset: u64, _data: &[u8]) -> Result<Rwrite, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn clunk(&self, _: &mut Self::Fid) -> Result<Rclunk, Rlerror> {
-        Ok(Rclunk {})
-    }
-
-    fn remove(&self, _: &mut Self::Fid) -> Result<Rremove, Rlerror> {
-        Err(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
-        })
-    }
-
-    fn version(&self, msize: u32, ver: &str) -> Rversion<'static> {
-        match ver {
-            P92000L => Rversion {
-                msize,
-                version: Cow::from(ver.to_owned()),
+impl<'a> Response {
+    fn _send(&mut self, resp: Fcall<'_>) {
+        let mut wstate = self.wstate.lock().unwrap();
+        let wstate = wstate.deref_mut();
+        let _ = fcall::write(
+            &mut wstate.conn,
+            &mut wstate.buf,
+            &fcall::TaggedFcall {
+                tag: self.tag,
+                fcall: resp,
             },
-            _ => Rversion {
-                msize,
-                version: Cow::from("unknown"),
-            },
+        );
+        self.tag = fcall::NOTAG;
+    }
+
+    pub fn send<R: Into<Fcall<'a>>>(mut self, r: R) {
+        self._send(r.into())
+    }
+}
+
+impl Drop for Response {
+    fn drop(&mut self) {
+        if self.tag != fcall::NOTAG {
+            self._send(Rlerror { ecode: lerrno::EIO }.into())
         }
     }
 }
 
-pub fn serve_single_threaded<R, W, F>(r: &mut R, w: &mut W, fs: &mut F)
+pub trait Filesystem {
+    fn statfs(&mut self, _req: &Tstatfs, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn lopen(&mut self, _req: &Tlopen, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn lcreate(&mut self, _req: &Tlcreate, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn symlink(&mut self, _req: &Tsymlink, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn mknod(&mut self, _req: &Tmknod, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn rename(&mut self, _req: &Trename, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn readlink(&mut self, _req: &Treadlink, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn getattr(&mut self, _req: &Tgetattr, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn setattr(&mut self, _req: &Tsetattr, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn xattrwalk(&mut self, _req: &Txattrwalk, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn xattrcreate(&mut self, _req: &Txattrcreate, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn readdir(&mut self, _req: &Treaddir, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn fsync(&mut self, _req: &Tfsync, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn lock(&mut self, _req: &Tlock, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn getlock(&mut self, _req: &Tgetlock, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn link(&mut self, _req: &Tlink, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn mkdir(&mut self, _req: &Tmkdir, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn renameat(&mut self, _req: &Trenameat, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn unlinkat(&mut self, _req: &Tunlinkat, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn auth(&mut self, _req: &Tauth, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn attach(&mut self, _req: &Tattach, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn flush(&mut self, _req: &Tflush, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn walk(&mut self, _req: &Twalk, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn read(&mut self, _req: &Tread, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn write(&mut self, _req: &Twrite, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn clunk(&mut self, _req: &Tclunk, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn remove(&mut self, _req: &Tremove, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+}
+
+pub trait ThreadedFilesystem {
+    fn statfs(&self, _req: &Tstatfs, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn lopen(&self, _req: &Tlopen, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn lcreate(&self, _req: &Tlcreate, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn symlink(&self, _req: &Tsymlink, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn mknod(&self, _req: &Tmknod, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn rename(&self, _req: &Trename, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn readlink(&self, _req: &Treadlink, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn getattr(&self, _req: &Tgetattr, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn setattr(&self, _req: &Tsetattr, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn xattrwalk(&self, _req: &Txattrwalk, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn xattrcreate(&self, _req: &Txattrcreate, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn readdir(&self, _req: &Treaddir, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn fsync(&self, _req: &Tfsync, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn lock(&self, _req: &Tlock, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn getlock(&self, _req: &Tgetlock, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn link(&self, _req: &Tlink, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn mkdir(&self, _req: &Tmkdir, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn renameat(&self, _req: &Trenameat, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn unlinkat(&self, _req: &Tunlinkat, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn auth(&self, _req: &Tauth, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn attach(&self, _req: &Tattach, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn flush(&self, _req: &Tflush, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn walk(&self, _req: &Twalk, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn read(&self, _req: &Tread, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn write(&self, _req: &Twrite, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn clunk(&self, _req: &Tclunk, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+
+    fn remove(&self, _req: &Tremove, resp: Response) {
+        resp.send(Rlerror {
+            ecode: lerrno::EOPNOTSUPP,
+        })
+    }
+}
+
+pub struct ThreadPoolServer<Fs: 'static + ThreadedFilesystem + Send + Sync> {
+    fs: Arc<Fs>,
+    workers: Vec<std::thread::JoinHandle<()>>,
+    dispatch_tx: crossbeam_channel::Sender<Box<dyn Send + FnOnce() -> ()>>,
+}
+
+impl<Fs: 'static + ThreadedFilesystem + Send + Sync> ThreadPoolServer<Fs> {
+    pub fn new(fs: Fs) -> ThreadPoolServer<Fs> {
+        let mut workers = Vec::new();
+
+        let (dispatch_tx, dispatch_rx): (
+            crossbeam_channel::Sender<Box<dyn Send + FnOnce() -> ()>>,
+            crossbeam_channel::Receiver<Box<dyn Send + FnOnce() -> ()>>,
+        ) = crossbeam_channel::bounded(0);
+
+        const N_WORKERS: usize = 8;
+        for _i in 0..N_WORKERS {
+            let rx = dispatch_rx.clone();
+            workers.push(std::thread::spawn(move || loop {
+                match rx.recv() {
+                    Ok(f) => f(),
+                    _ => todo!(),
+                }
+            }))
+        }
+
+        Self {
+            fs: Arc::new(fs),
+            workers,
+            dispatch_tx,
+        }
+    }
+
+    fn dispatch(&mut self, f: Box<dyn Send + FnOnce() -> ()>) {
+        let _ = self.dispatch_tx.send(f);
+    }
+}
+
+impl<Fs: 'static + ThreadedFilesystem + Send + Sync> Drop for ThreadPoolServer<Fs> {
+    fn drop(&mut self) {
+        // Close sender by overwriting it.
+        let (dispatch_tx, _) = crossbeam_channel::bounded(0);
+        self.dispatch_tx = dispatch_tx;
+
+        for w in self.workers.drain(..) {
+            w.join().unwrap()
+        }
+    }
+}
+
+impl<Fs: 'static + ThreadedFilesystem + Send + Sync> Filesystem for ThreadPoolServer<Fs> {
+    fn statfs(&mut self, req: &Tstatfs, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.statfs(&req, resp)));
+    }
+
+    fn lopen(&mut self, req: &Tlopen, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.lopen(&req, resp)));
+    }
+
+    fn lcreate(&mut self, req: &Tlcreate, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.lcreate(&req, resp)));
+    }
+
+    fn symlink(&mut self, req: &Tsymlink, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.symlink(&req, resp)));
+    }
+
+    fn mknod(&mut self, req: &Tmknod, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.mknod(&req, resp)));
+    }
+
+    fn rename(&mut self, req: &Trename, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.rename(&req, resp)));
+    }
+
+    fn readlink(&mut self, req: &Treadlink, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.readlink(&req, resp)));
+    }
+
+    fn getattr(&mut self, req: &Tgetattr, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.getattr(&req, resp)));
+    }
+
+    fn setattr(&mut self, req: &Tsetattr, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.setattr(&req, resp)));
+    }
+
+    fn xattrwalk(&mut self, req: &Txattrwalk, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.xattrwalk(&req, resp)));
+    }
+
+    fn xattrcreate(&mut self, req: &Txattrcreate, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.xattrcreate(&req, resp)));
+    }
+
+    fn readdir(&mut self, req: &Treaddir, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.readdir(&req, resp)));
+    }
+
+    fn fsync(&mut self, req: &Tfsync, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.fsync(&req, resp)));
+    }
+
+    fn lock(&mut self, req: &Tlock, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.lock(&req, resp)));
+    }
+
+    fn getlock(&mut self, req: &Tgetlock, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.getlock(&req, resp)));
+    }
+
+    fn link(&mut self, req: &Tlink, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.link(&req, resp)));
+    }
+
+    fn mkdir(&mut self, req: &Tmkdir, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.mkdir(&req, resp)));
+    }
+
+    fn renameat(&mut self, req: &Trenameat, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.renameat(&req, resp)));
+    }
+
+    fn unlinkat(&mut self, req: &Tunlinkat, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.unlinkat(&req, resp)));
+    }
+
+    fn auth(&mut self, req: &Tauth, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.auth(&req, resp)));
+    }
+
+    fn attach(&mut self, req: &Tattach, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.attach(&req, resp)));
+    }
+
+    fn flush(&mut self, req: &Tflush, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.flush(&req, resp)));
+    }
+
+    fn walk(&mut self, req: &Twalk, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.walk(&req, resp)));
+    }
+
+    fn read(&mut self, req: &Tread, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.read(&req, resp)));
+    }
+
+    fn write(&mut self, req: &Twrite, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone_static();
+        self.dispatch(Box::new(move || fs.write(&req, resp)));
+    }
+
+    fn clunk(&mut self, req: &Tclunk, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.clunk(&req, resp)));
+    }
+
+    fn remove(&mut self, req: &Tremove, resp: Response) {
+        let fs = self.fs.clone();
+        let req = req.clone();
+        self.dispatch(Box::new(move || fs.remove(&req, resp)));
+    }
+}
+
+pub fn serve<F>(mut conn: std::net::TcpStream, fs: &mut F, mut bufsize: usize)
 where
-    R: Read,
-    W: Write,
     F: Filesystem,
 {
-    let mut fids = HashMap::<u32, F::Fid>::new();
-    // Message buffer.
-    let mut mbuf: Vec<u8> = Vec::with_capacity(65536);
-    // Data buffer.
-    let mut dbuf: Vec<u8> = Vec::with_capacity(8192);
+    bufsize = bufsize
+        .min(u32::MAX as usize)
+        .max(4096 + fcall::READDIRHDRSZ as usize);
 
-    // Handle version and size buffers.
-    match fcall::read(r, &mut mbuf) {
+    let mut rbuf: Vec<u8> = Vec::with_capacity(bufsize);
+    let mut wbuf: Vec<u8> = Vec::with_capacity(bufsize);
+
+    // Handle version and size buffer.
+    match fcall::read(&mut conn, &mut rbuf) {
         Ok(fcall::TaggedFcall {
             tag: fcall::NOTAG,
             fcall:
@@ -276,14 +608,23 @@ where
                     ref version,
                 }),
         }) => {
-            let rversion = fs.version(*msize, version);
-            assert!(rversion.msize <= *msize);
-            assert!(rversion.msize >= 512);
-            mbuf.resize(rversion.msize as usize, 0);
-            dbuf.resize((rversion.msize - fcall::IOHDRSZ) as usize, 0);
+            let msize = (*msize).min(bufsize as u32);
+
+            let rversion = if version == P92000L {
+                Rversion {
+                    version: version.clone(),
+                    msize,
+                }
+            } else {
+                Rversion {
+                    version: Cow::from("unknown"),
+                    msize,
+                }
+            };
+
             if fcall::write(
-                w,
-                &mut mbuf,
+                &mut conn,
+                &mut wbuf,
                 &fcall::TaggedFcall {
                     tag: fcall::NOTAG,
                     fcall: rversion.into(),
@@ -293,244 +634,67 @@ where
             {
                 return;
             }
+
+            bufsize = msize as usize;
         }
-        Ok(_) => return,
-        Err(_) => return,
+        _ => return,
     }
 
-    while let Ok(req) = fcall::read(r, &mut mbuf) {
-        macro_rules! get_fid {
-            ($ident:ident, $e:expr) => {
-                match fids.get_mut(&$ident) {
-                    Some($ident) => $e,
-                    None => Fcall::Rlerror(Rlerror {
-                        ecode: lerrno::EBADF,
-                    }),
-                }
-            };
-        }
+    rbuf.resize(bufsize, 0);
+    wbuf.resize(bufsize, 0);
 
-        macro_rules! get_fids {
-            ($f1:ident, $f2:ident, $e:expr) => {{
-                // Work around borrow restrictions by removing the fid temporarily,
-                // then re-adding it after we are done.
-                let f1 = $f1;
-                if let Some(mut $f1) = fids.remove(&f1) {
-                    if let Some($f2) = fids.get_mut(&$f2) {
-                        let $f1 = &mut $f1;
-                        $e
-                    } else {
-                        fids.insert(f1, $f1);
-                        Fcall::Rlerror(Rlerror {
-                            ecode: lerrno::EBADF,
-                        })
-                    }
-                } else {
-                    Fcall::Rlerror(Rlerror {
-                        ecode: lerrno::EBADF,
-                    })
-                }
-            }};
-        }
+    let (wconn, mut rconn) = if let Ok(wconn) = conn.try_clone() {
+        (wconn, conn)
+    } else {
+        return;
+    };
 
-        let resp = match req.fcall {
-            Fcall::Tstatfs(Tstatfs { fid }) => get_fid!(fid, fs.statfs(fid).into()),
-            Fcall::Tlopen(Tlopen { fid, ref flags }) => {
-                get_fid!(fid, fs.lopen(fid, *flags).into())
-            }
-            Fcall::Tlcreate(Tlcreate {
-                fid,
-                ref name,
-                ref flags,
-                ref mode,
-                ref gid,
-            }) => get_fid!(fid, fs.lcreate(fid, name, *flags, *mode, *gid).into()),
-            Fcall::Tsymlink(Tsymlink {
-                fid,
-                ref name,
-                ref symtgt,
-                ref gid,
-            }) => get_fid!(fid, fs.symlink(fid, name, symtgt, *gid).into()),
-            Fcall::Tmknod(Tmknod {
-                dfid,
-                ref name,
-                ref mode,
-                ref major,
-                ref minor,
-                ref gid,
-            }) => get_fid!(
-                dfid,
-                fs.mknod(dfid, name, *mode, *major, *minor, *gid).into()
-            ),
-            Fcall::Treadlink(Treadlink { fid }) => get_fid!(fid, fs.readlink(fid).into()),
-            Fcall::Tgetattr(Tgetattr { fid, ref req_mask }) => {
-                get_fid!(fid, fs.getattr(fid, *req_mask).into())
-            }
-            Fcall::Tsetattr(Tsetattr {
-                fid,
-                ref valid,
-                ref stat,
-            }) => get_fid!(fid, fs.setattr(fid, *valid, stat).into()),
-            Fcall::Treaddir(Treaddir {
-                fid,
-                ref offset,
-                ref count,
-            }) => get_fid!(fid, fs.readdir(fid, *offset, *count).into()),
-            Fcall::Tfsync(Tfsync { fid }) => get_fid!(fid, fs.fsync(fid).into()),
-            Fcall::Tmkdir(Tmkdir {
-                dfid,
-                ref name,
-                ref mode,
-                ref gid,
-            }) => get_fid!(dfid, fs.mkdir(dfid, name, *mode, *gid).into()),
-            Fcall::Tflush(Tflush { .. }) => fs.flush().into(),
-            Fcall::Tread(Tread {
-                fid,
-                ref offset,
-                ref count,
-            }) => {
-                match fids.get_mut(&fid) {
-                    Some(fid) => {
-                        let count = *count as usize;
-                        let count = count.min(dbuf.capacity());
-                        // This is safe as we just checked the count against the capacity.
-                        unsafe { dbuf.set_len(count) };
-                        match fs.read(fid, *offset, &mut dbuf[..]) {
-                            Ok(n) => {
-                                // Temporarily borrow the data buffer, we swap it back later.
-                                dbuf.truncate(n);
-                                let mut swapbuf = Vec::new();
-                                std::mem::swap(&mut dbuf, &mut swapbuf);
-                                fcall::Rread {
-                                    data: Cow::from(swapbuf),
-                                }
-                                .into()
-                            }
-                            Err(rlerror) => rlerror.into(),
-                        }
-                    }
-                    None => Fcall::Rlerror(fcall::Rlerror {
-                        ecode: lerrno::EBADF,
-                    }),
-                }
-            }
-            Fcall::Twrite(Twrite {
-                fid,
-                ref offset,
-                ref data,
-            }) => get_fid!(fid, fs.write(fid, *offset, data).into()),
-            Fcall::Tclunk(Tclunk { fid }) => {
-                let r = get_fid!(fid, fs.clunk(fid).into());
-                if let Fcall::Rclunk(_) = r {
-                    fids.remove(&fid);
-                }
-                r
-            }
-            Fcall::Tremove(Tremove { fid }) => get_fid!(fid, fs.remove(fid).into()),
-            Fcall::Trename(Trename {
-                fid,
-                dfid,
-                ref name,
-            }) => get_fids!(fid, dfid, fs.rename(fid, dfid, name).into()),
-            Fcall::Tlink(Tlink {
-                dfid,
-                fid,
-                ref name,
-            }) => get_fids!(fid, dfid, fs.link(dfid, fid, name).into()),
-            Fcall::Trenameat(Trenameat {
-                olddfid,
-                ref oldname,
-                newdfid,
-                ref newname,
-            }) => get_fids!(
-                olddfid,
-                newdfid,
-                fs.renameat(olddfid, oldname, newdfid, newname).into()
-            ),
-            Fcall::Tunlinkat(Tunlinkat {
-                dfid,
-                ref name,
-                ref flags,
-            }) => get_fid!(dfid, fs.unlinkat(dfid, name, *flags).into()),
-            /*
-            Fcall::Txattrwalk {
-                fid,
-                new_fid,
-                ref name,
-            } => new_fid!(new_fid, get_fid!(fid, fs.rxattrwalk(fid, new_fid, name))),
-            Fcall::Txattrcreate {
-                fid,
-                ref name,
-                ref attr_size,
-                ref flags,
-            } => get_fid!(fid, fs.rxattrcreate(fid, name, *attr_size, *flags)),
-            */
-            Fcall::Tlock(Tlock { fid, ref flock }) => get_fid!(fid, fs.lock(fid, flock).into()),
-            Fcall::Tgetlock(Tgetlock { fid, ref flock }) => {
-                get_fid!(fid, fs.getlock(fid, flock).into())
-            }
-            Fcall::Tauth(Tauth {
-                afid,
-                ref uname,
-                ref aname,
-                ref n_uname,
-            }) => match fs.auth(uname, aname, *n_uname) {
-                Ok((f, rauth)) => {
-                    fids.insert(afid, f);
-                    rauth.into()
-                }
-                Err(rlerror) => rlerror.into(),
-            },
-            Fcall::Tattach(Tattach {
-                fid,
-                afid: _,
-                ref uname,
-                ref aname,
-                ref n_uname,
-            }) => match fs.attach(None, uname, aname, *n_uname) {
-                Ok((f, rattach)) => {
-                    fids.insert(fid, f);
-                    rattach.into()
-                }
-                Err(rlerror) => rlerror.into(),
-            },
-            Fcall::Twalk(Twalk {
-                fid,
-                new_fid,
-                ref wnames,
-            }) => match fids.get_mut(&fid) {
-                Some(fid) => match fs.walk(fid, wnames) {
-                    Ok((None, rwalk)) => rwalk.into(),
-                    Ok((Some(f), rwalk)) => {
-                        fids.insert(new_fid, f);
-                        rwalk.into()
-                    }
-                    Err(rlerror) => rlerror.into(),
+    let wstate = Arc::new(Mutex::new(WriteState {
+        conn: wconn,
+        buf: wbuf,
+    }));
+
+    loop {
+        let (fcall, resp) = match fcall::read(&mut rconn, &mut rbuf) {
+            Ok(fcall::TaggedFcall { tag, fcall }) => (
+                fcall,
+                Response {
+                    tag,
+                    wstate: wstate.clone(),
                 },
-                None => Fcall::Rlerror(fcall::Rlerror {
-                    ecode: lerrno::EBADF,
-                }),
-            },
-            _ => Fcall::Rlerror(fcall::Rlerror {
-                ecode: lerrno::EOPNOTSUPP,
-            }),
+            ),
+            _ => return,
         };
 
-        let tagged_resp = fcall::TaggedFcall {
-            tag: req.tag,
-            fcall: resp,
+        match fcall {
+            Fcall::Tstatfs(req) => fs.statfs(&req, resp),
+            Fcall::Tlopen(req) => fs.lopen(&req, resp),
+            Fcall::Tlcreate(req) => fs.lcreate(&req, resp),
+            Fcall::Tsymlink(req) => fs.symlink(&req, resp),
+            Fcall::Tmknod(req) => fs.mknod(&req, resp),
+            Fcall::Treadlink(req) => fs.readlink(&req, resp),
+            Fcall::Tgetattr(req) => fs.getattr(&req, resp),
+            Fcall::Tsetattr(req) => fs.setattr(&req, resp),
+            Fcall::Treaddir(req) => fs.readdir(&req, resp),
+            Fcall::Tfsync(req) => fs.fsync(&req, resp),
+            Fcall::Tmkdir(req) => fs.mkdir(&req, resp),
+            Fcall::Tflush(req) => fs.flush(&req, resp),
+            Fcall::Tread(req) => fs.read(&req, resp),
+            Fcall::Twrite(req) => fs.write(&req, resp),
+            Fcall::Tclunk(req) => fs.clunk(&req, resp),
+            Fcall::Tremove(req) => fs.remove(&req, resp),
+            Fcall::Trename(req) => fs.rename(&req, resp),
+            Fcall::Tlink(req) => fs.link(&req, resp),
+            Fcall::Trenameat(req) => fs.renameat(&req, resp),
+            Fcall::Tunlinkat(req) => fs.unlinkat(&req, resp),
+            Fcall::Tlock(req) => fs.lock(&req, resp),
+            Fcall::Tgetlock(req) => fs.getlock(&req, resp),
+            Fcall::Tauth(req) => fs.auth(&req, resp),
+            Fcall::Tattach(req) => fs.attach(&req, resp),
+            Fcall::Twalk(req) => fs.walk(&req, resp),
+            Fcall::Txattrwalk(req) => fs.xattrwalk(&req, resp),
+            Fcall::Txattrcreate(req) => fs.xattrcreate(&req, resp),
+            _ => return,
         };
-
-        if fcall::write(w, &mut mbuf, &tagged_resp).is_err() {
-            break;
-        }
-
-        if let Fcall::Rread(Rread {
-            data: Cow::Owned(mut data),
-        }) = tagged_resp.fcall
-        {
-            // reclaim the data buffer.
-            std::mem::swap(&mut dbuf, &mut data);
-        }
     }
 }

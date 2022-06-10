@@ -487,6 +487,18 @@ pub struct Tattach<'a> {
     pub n_uname: u32,
 }
 
+impl<'a> Tattach<'a> {
+    pub fn clone_static(&self) -> Tattach<'static> {
+        Tattach {
+            afid: self.afid,
+            fid: self.fid,
+            n_uname: self.n_uname.to_owned(),
+            aname: Cow::from(self.aname.clone().into_owned()),
+            uname: Cow::from(self.uname.clone().into_owned()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rattach {
     pub qid: Qid,
@@ -523,6 +535,18 @@ pub struct Tlcreate<'a> {
     pub gid: u32,
 }
 
+impl<'a> Tlcreate<'a> {
+    pub fn clone_static(&'a self) -> Tlcreate<'static> {
+        Tlcreate {
+            fid: self.fid,
+            flags: self.flags,
+            gid: self.gid,
+            mode: self.mode,
+            name: Cow::from(self.name.clone().into_owned()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rlcreate {
     pub qid: Qid,
@@ -535,6 +559,17 @@ pub struct Tsymlink<'a> {
     pub name: Cow<'a, str>,
     pub symtgt: Cow<'a, str>,
     pub gid: u32,
+}
+
+impl<'a> Tsymlink<'a> {
+    pub fn clone_static(&'a self) -> Tsymlink<'static> {
+        Tsymlink {
+            fid: self.fid,
+            name: Cow::from(self.name.clone().into_owned()),
+            symtgt: Cow::from(self.symtgt.clone().into_owned()),
+            gid: self.gid,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -552,15 +587,39 @@ pub struct Tmknod<'a> {
     pub gid: u32,
 }
 
+impl<'a> Tmknod<'a> {
+    pub fn clone_static(&'a self) -> Tmknod<'static> {
+        Tmknod {
+            dfid: self.dfid,
+            gid: self.gid,
+            major: self.major,
+            minor: self.minor,
+            mode: self.mode,
+            name: Cow::from(self.name.clone().into_owned()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rmknod {
     pub qid: Qid,
 }
+
 #[derive(Clone, Debug)]
 pub struct Trename<'a> {
     pub fid: u32,
     pub dfid: u32,
     pub name: Cow<'a, str>,
+}
+
+impl<'a> Trename<'a> {
+    pub fn clone_static(&'a self) -> Trename<'static> {
+        Trename {
+            fid: self.fid,
+            dfid: self.dfid,
+            name: Cow::from(self.name.clone().into_owned()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -576,11 +635,20 @@ pub struct Rreadlink<'a> {
     pub target: Cow<'a, str>,
 }
 
+impl<'a> Rreadlink<'a> {
+    pub fn clone_static(&'a self) -> Rreadlink<'static> {
+        Rreadlink {
+            target: Cow::from(self.target.clone().into_owned()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Tgetattr {
     pub fid: u32,
     pub req_mask: GetattrMask,
 }
+
 #[derive(Clone, Debug)]
 pub struct Rgetattr {
     pub valid: GetattrMask,
@@ -605,6 +673,16 @@ pub struct Txattrwalk<'a> {
     pub name: Cow<'a, str>,
 }
 
+impl<'a> Txattrwalk<'a> {
+    pub fn clone_static(&'a self) -> Txattrwalk<'static> {
+        Txattrwalk {
+            fid: self.fid,
+            new_fid: self.new_fid,
+            name: Cow::from(self.name.clone().into_owned()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rxattrwalk {
     pub size: u64,
@@ -616,6 +694,17 @@ pub struct Txattrcreate<'a> {
     pub name: Cow<'a, str>,
     pub attr_size: u64,
     pub flags: u32,
+}
+
+impl<'a> Txattrcreate<'a> {
+    pub fn clone_static(&'a self) -> Txattrcreate<'static> {
+        Txattrcreate {
+            fid: self.fid,
+            name: Cow::from(self.name.clone().into_owned()),
+            attr_size: self.attr_size,
+            flags: self.flags,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -633,6 +722,26 @@ pub struct Rreaddir<'a> {
     pub data: DirEntryData<'a>,
 }
 
+impl<'a> Rreaddir<'a> {
+    pub fn clone_static(&'a self) -> Rreaddir<'static> {
+        Rreaddir {
+            data: DirEntryData {
+                data: self
+                    .data
+                    .data
+                    .iter()
+                    .map(|de| DirEntry {
+                        qid: de.qid,
+                        offset: de.offset,
+                        typ: de.typ,
+                        name: Cow::from(de.name.clone().into_owned()),
+                    })
+                    .collect(),
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Tfsync {
     pub fid: u32,
@@ -647,6 +756,22 @@ pub struct Tlock<'a> {
     pub flock: Flock<'a>,
 }
 
+impl<'a> Tlock<'a> {
+    pub fn clone_static(&'a self) -> Tlock<'static> {
+        Tlock {
+            fid: self.fid,
+            flock: Flock {
+                typ: self.flock.typ,
+                flags: self.flock.flags,
+                start: self.flock.start,
+                length: self.flock.length,
+                proc_id: self.flock.proc_id,
+                client_id: Cow::from(self.flock.client_id.clone().into_owned()),
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rlock {
     pub status: LockStatus,
@@ -658,9 +783,38 @@ pub struct Tgetlock<'a> {
     pub flock: Getlock<'a>,
 }
 
+impl<'a> Tgetlock<'a> {
+    pub fn clone_static(&'a self) -> Tgetlock<'static> {
+        Tgetlock {
+            fid: self.fid,
+            flock: Getlock {
+                typ: self.flock.typ,
+                start: self.flock.start,
+                length: self.flock.length,
+                proc_id: self.flock.proc_id,
+                client_id: Cow::from(self.flock.client_id.clone().into_owned()),
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rgetlock<'a> {
     pub flock: Getlock<'a>,
+}
+
+impl<'a> Rgetlock<'a> {
+    pub fn clone_static(&'a self) -> Rgetlock<'static> {
+        Rgetlock {
+            flock: Getlock {
+                typ: self.flock.typ,
+                start: self.flock.start,
+                length: self.flock.length,
+                proc_id: self.flock.proc_id,
+                client_id: Cow::from(self.flock.client_id.clone().into_owned()),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -668,6 +822,16 @@ pub struct Tlink<'a> {
     pub dfid: u32,
     pub fid: u32,
     pub name: Cow<'a, str>,
+}
+
+impl<'a> Tlink<'a> {
+    pub fn clone_static(&'a self) -> Tlink<'static> {
+        Tlink {
+            fid: self.fid,
+            dfid: self.dfid,
+            name: Cow::from(self.name.clone().into_owned()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -679,6 +843,17 @@ pub struct Tmkdir<'a> {
     pub name: Cow<'a, str>,
     pub mode: u32,
     pub gid: u32,
+}
+
+impl<'a> Tmkdir<'a> {
+    pub fn clone_static(&'a self) -> Tmkdir<'static> {
+        Tmkdir {
+            dfid: self.dfid,
+            gid: self.gid,
+            mode: self.mode,
+            name: Cow::from(self.name.clone().into_owned()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -694,6 +869,17 @@ pub struct Trenameat<'a> {
     pub newname: Cow<'a, str>,
 }
 
+impl<'a> Trenameat<'a> {
+    pub fn clone_static(&'a self) -> Trenameat<'static> {
+        Trenameat {
+            newdfid: self.newdfid,
+            olddfid: self.olddfid,
+            newname: Cow::from(self.newname.clone().into_owned()),
+            oldname: Cow::from(self.oldname.clone().into_owned()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rrenameat {}
 
@@ -702,6 +888,16 @@ pub struct Tunlinkat<'a> {
     pub dfid: u32,
     pub name: Cow<'a, str>,
     pub flags: u32,
+}
+
+impl<'a> Tunlinkat<'a> {
+    pub fn clone_static(&'a self) -> Tunlinkat<'static> {
+        Tunlinkat {
+            dfid: self.dfid,
+            flags: self.flags,
+            name: Cow::from(self.name.clone().into_owned()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -715,6 +911,17 @@ pub struct Tauth<'a> {
     pub n_uname: u32,
 }
 
+impl<'a> Tauth<'a> {
+    pub fn clone_static(&'a self) -> Tauth<'static> {
+        Tauth {
+            afid: self.afid,
+            n_uname: self.n_uname,
+            aname: Cow::from(self.aname.clone().into_owned()),
+            uname: Cow::from(self.uname.clone().into_owned()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rauth {
     pub aqid: Qid,
@@ -726,10 +933,28 @@ pub struct Tversion<'a> {
     pub version: Cow<'a, str>,
 }
 
+impl<'a> Tversion<'a> {
+    pub fn clone_static(&'a self) -> Tversion<'static> {
+        Tversion {
+            msize: self.msize,
+            version: Cow::from(self.version.clone().into_owned()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rversion<'a> {
     pub msize: u32,
     pub version: Cow<'a, str>,
+}
+
+impl<'a> Rversion<'a> {
+    pub fn clone_static(&'a self) -> Rversion<'static> {
+        Rversion {
+            msize: self.msize,
+            version: Cow::from(self.version.clone().into_owned()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -745,6 +970,20 @@ pub struct Twalk<'a> {
     pub fid: u32,
     pub new_fid: u32,
     pub wnames: Vec<Cow<'a, str>>,
+}
+
+impl<'a> Twalk<'a> {
+    pub fn clone_static(&'a self) -> Twalk<'static> {
+        Twalk {
+            fid: self.fid,
+            new_fid: self.new_fid,
+            wnames: self
+                .wnames
+                .iter()
+                .map(|n| Cow::from(n.clone().into_owned()))
+                .collect(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -763,11 +1002,29 @@ pub struct Rread<'a> {
     pub data: Cow<'a, [u8]>,
 }
 
+impl<'a> Rread<'a> {
+    pub fn clone_static(&'a self) -> Rread<'static> {
+        Rread {
+            data: Cow::from(self.data.clone().into_owned()),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Twrite<'a> {
     pub fid: u32,
     pub offset: u64,
     pub data: Cow<'a, [u8]>,
+}
+
+impl<'a> Twrite<'a> {
+    pub fn clone_static(&'a self) -> Twrite<'static> {
+        Twrite {
+            fid: self.fid,
+            offset: self.offset,
+            data: Cow::from(self.data.clone().into_owned()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1141,182 +1398,57 @@ impl<'a> Fcall<'a> {
     pub fn clone_static(&self) -> Fcall<'static> {
         match self {
             Fcall::Rlerror(ref v) => Fcall::Rlerror(v.clone()),
-            Fcall::Tattach(ref v) => Fcall::Tattach(Tattach {
-                afid: v.afid,
-                fid: v.fid,
-                n_uname: v.n_uname.to_owned(),
-                aname: Cow::from(v.aname.clone().into_owned()),
-                uname: Cow::from(v.uname.clone().into_owned()),
-            }),
+            Fcall::Tattach(ref v) => Fcall::Tattach(v.clone_static()),
             Fcall::Rattach(ref v) => Fcall::Rattach(v.clone()),
             Fcall::Tstatfs(v) => Fcall::Tstatfs(v.clone()),
             Fcall::Rstatfs(v) => Fcall::Rstatfs(v.clone()),
             Fcall::Tlopen(v) => Fcall::Tlopen(v.clone()),
             Fcall::Rlopen(v) => Fcall::Rlopen(v.clone()),
-            Fcall::Tlcreate(v) => Fcall::Tlcreate(Tlcreate {
-                fid: v.fid,
-                flags: v.flags,
-                gid: v.gid,
-                mode: v.mode,
-                name: Cow::from(v.name.clone().into_owned()),
-            }),
+            Fcall::Tlcreate(v) => Fcall::Tlcreate(v.clone_static()),
             Fcall::Rlcreate(v) => Fcall::Rlcreate(v.clone()),
-            Fcall::Tsymlink(v) => Fcall::Tsymlink(Tsymlink {
-                fid: v.fid,
-                gid: v.gid,
-                name: Cow::from(v.name.clone().into_owned()),
-                symtgt: Cow::from(v.symtgt.clone().into_owned()),
-            }),
+            Fcall::Tsymlink(v) => Fcall::Tsymlink(v.clone_static()),
             Fcall::Rsymlink(v) => Fcall::Rsymlink(v.clone()),
-            Fcall::Tmknod(v) => Fcall::Tmknod(Tmknod {
-                dfid: v.dfid,
-                gid: v.gid,
-                major: v.major,
-                minor: v.minor,
-                mode: v.mode,
-                name: Cow::from(v.name.clone().into_owned()),
-            }),
+            Fcall::Tmknod(v) => Fcall::Tmknod(v.clone_static()),
             Fcall::Rmknod(v) => Fcall::Rmknod(v.clone()),
-            Fcall::Trename(v) => Fcall::Trename(Trename {
-                fid: v.fid,
-                dfid: v.dfid,
-                name: Cow::from(v.name.clone().into_owned()),
-            }),
+            Fcall::Trename(v) => Fcall::Trename(v.clone_static()),
             Fcall::Rrename(v) => Fcall::Rrename(v.clone()),
             Fcall::Treadlink(v) => Fcall::Treadlink(v.clone()),
-            Fcall::Rreadlink(v) => Fcall::Rreadlink(Rreadlink {
-                target: Cow::from(v.target.clone().into_owned()),
-            }),
+            Fcall::Rreadlink(v) => Fcall::Rreadlink(v.clone_static()),
             Fcall::Tgetattr(v) => Fcall::Tgetattr(v.clone()),
             Fcall::Rgetattr(v) => Fcall::Rgetattr(v.clone()),
             Fcall::Tsetattr(v) => Fcall::Tsetattr(v.clone()),
             Fcall::Rsetattr(v) => Fcall::Rsetattr(v.clone()),
-            Fcall::Txattrwalk(v) => Fcall::Txattrwalk(Txattrwalk {
-                fid: v.fid,
-                new_fid: v.new_fid,
-                name: Cow::from(v.name.clone().into_owned()),
-            }),
+            Fcall::Txattrwalk(v) => Fcall::Txattrwalk(v.clone_static()),
             Fcall::Rxattrwalk(v) => Fcall::Rxattrwalk(v.clone()),
-            Fcall::Txattrcreate(v) => Fcall::Txattrcreate(Txattrcreate {
-                fid: v.fid,
-                attr_size: v.attr_size,
-                flags: v.flags,
-                name: Cow::from(v.name.clone().into_owned()),
-            }),
+            Fcall::Txattrcreate(v) => Fcall::Txattrcreate(v.clone_static()),
             Fcall::Rxattrcreate(v) => Fcall::Rxattrcreate(v.clone()),
             Fcall::Treaddir(v) => Fcall::Treaddir(v.clone()),
-            Fcall::Rreaddir(v) => Fcall::Rreaddir(Rreaddir {
-                data: DirEntryData {
-                    data: v
-                        .data
-                        .data
-                        .iter()
-                        .map(|de| DirEntry {
-                            qid: de.qid,
-                            offset: de.offset,
-                            typ: de.typ,
-                            name: Cow::from(de.name.clone().into_owned()),
-                        })
-                        .collect(),
-                },
-            }),
-
+            Fcall::Rreaddir(v) => Fcall::Rreaddir(v.clone_static()),
             Fcall::Tfsync(v) => Fcall::Tfsync(v.clone()),
             Fcall::Rfsync(v) => Fcall::Rfsync(v.clone()),
-            Fcall::Tlock(v) => Fcall::Tlock(Tlock {
-                fid: v.fid,
-                flock: Flock {
-                    typ: v.flock.typ,
-                    flags: v.flock.flags,
-                    start: v.flock.start,
-                    length: v.flock.length,
-                    proc_id: v.flock.proc_id,
-                    client_id: Cow::from(v.flock.client_id.clone().into_owned()),
-                },
-            }),
+            Fcall::Tlock(v) => Fcall::Tlock(v.clone_static()),
             Fcall::Rlock(v) => Fcall::Rlock(v.clone()),
-            Fcall::Tgetlock(v) => Fcall::Tgetlock(Tgetlock {
-                fid: v.fid,
-                flock: Getlock {
-                    typ: v.flock.typ,
-                    start: v.flock.start,
-                    length: v.flock.length,
-                    proc_id: v.flock.proc_id,
-                    client_id: Cow::from(v.flock.client_id.clone().into_owned()),
-                },
-            }),
-            Fcall::Rgetlock(v) => Fcall::Rgetlock(Rgetlock {
-                flock: Getlock {
-                    typ: v.flock.typ,
-                    start: v.flock.start,
-                    length: v.flock.length,
-                    proc_id: v.flock.proc_id,
-                    client_id: Cow::from(v.flock.client_id.clone().into_owned()),
-                },
-            }),
-            Fcall::Tlink(v) => Fcall::Tlink(Tlink {
-                fid: v.fid,
-                dfid: v.dfid,
-                name: Cow::from(v.name.clone().into_owned()),
-            }),
+            Fcall::Tgetlock(v) => Fcall::Tgetlock(v.clone_static()),
+            Fcall::Rgetlock(v) => Fcall::Rgetlock(v.clone_static()),
+            Fcall::Tlink(v) => Fcall::Tlink(v.clone_static()),
             Fcall::Rlink(v) => Fcall::Rlink(v.clone()),
-
-            Fcall::Tmkdir(v) => Fcall::Tmkdir(Tmkdir {
-                dfid: v.dfid,
-                gid: v.gid,
-                mode: v.mode,
-                name: Cow::from(v.name.clone().into_owned()),
-            }),
+            Fcall::Tmkdir(v) => Fcall::Tmkdir(v.clone_static()),
             Fcall::Rmkdir(v) => Fcall::Rmkdir(v.clone()),
-            Fcall::Trenameat(v) => Fcall::Trenameat(Trenameat {
-                newdfid: v.newdfid,
-                olddfid: v.olddfid,
-                newname: Cow::from(v.newname.clone().into_owned()),
-                oldname: Cow::from(v.oldname.clone().into_owned()),
-            }),
+            Fcall::Trenameat(v) => Fcall::Trenameat(v.clone_static()),
             Fcall::Rrenameat(v) => Fcall::Rrenameat(v.clone()),
-            Fcall::Tunlinkat(v) => Fcall::Tunlinkat(Tunlinkat {
-                dfid: v.dfid,
-                flags: v.flags,
-                name: Cow::from(v.name.clone().into_owned()),
-            }),
+            Fcall::Tunlinkat(v) => Fcall::Tunlinkat(v.clone_static()),
             Fcall::Runlinkat(v) => Fcall::Runlinkat(v.clone()),
-            Fcall::Tauth(v) => Fcall::Tauth(Tauth {
-                afid: v.afid,
-                n_uname: v.n_uname,
-                aname: Cow::from(v.aname.clone().into_owned()),
-                uname: Cow::from(v.uname.clone().into_owned()),
-            }),
+            Fcall::Tauth(v) => Fcall::Tauth(v.clone_static()),
             Fcall::Rauth(v) => Fcall::Rauth(v.clone()),
-            Fcall::Tversion(v) => Fcall::Tversion(Tversion {
-                msize: v.msize,
-                version: Cow::from(v.version.clone().into_owned()),
-            }),
-            Fcall::Rversion(v) => Fcall::Rversion(Rversion {
-                msize: v.msize,
-                version: Cow::from(v.version.clone().into_owned()),
-            }),
+            Fcall::Tversion(v) => Fcall::Tversion(v.clone_static()),
+            Fcall::Rversion(v) => Fcall::Rversion(v.clone_static()),
             Fcall::Tflush(v) => Fcall::Tflush(v.clone()),
             Fcall::Rflush(v) => Fcall::Rflush(v.clone()),
-            Fcall::Twalk(v) => Fcall::Twalk(Twalk {
-                fid: v.fid,
-                new_fid: v.new_fid,
-                wnames: v
-                    .wnames
-                    .iter()
-                    .map(|n| Cow::from(n.clone().into_owned()))
-                    .collect(),
-            }),
+            Fcall::Twalk(v) => Fcall::Twalk(v.clone_static()),
             Fcall::Rwalk(v) => Fcall::Rwalk(v.clone()),
             Fcall::Tread(v) => Fcall::Tread(v.clone()),
-            Fcall::Rread(v) => Fcall::Rread(Rread {
-                data: Cow::from(v.data.clone().into_owned()),
-            }),
-            Fcall::Twrite(v) => Fcall::Twrite(Twrite {
-                fid: v.fid,
-                offset: v.offset,
-                data: Cow::from(v.data.clone().into_owned()),
-            }),
+            Fcall::Rread(v) => Fcall::Rread(v.clone_static()),
+            Fcall::Twrite(v) => Fcall::Twrite(v.clone_static()),
             Fcall::Rwrite(v) => Fcall::Rwrite(v.clone()),
             Fcall::Tclunk(v) => Fcall::Tclunk(v.clone()),
             Fcall::Rclunk(v) => Fcall::Rclunk(v.clone()),
@@ -1569,13 +1701,14 @@ fn encode_direntrydata<'a, 'b, W: Write>(
     w: &'a mut W,
     v: &'a DirEntryData<'b>,
 ) -> std::io::Result<()> {
-    if v.data.len() > 0xffff {
+    let data_size = v.size();
+    if data_size > 0xffffffff {
         return Err(std::io::Error::new(
             ::std::io::ErrorKind::InvalidInput,
             "dir entry vec too long for encoding",
         ));
     }
-    encode_u16(w, v.data.len() as u16)?;
+    encode_u32(w, data_size as u32)?;
     for v in v.data.iter() {
         encode_direntry(w, v)?;
     }

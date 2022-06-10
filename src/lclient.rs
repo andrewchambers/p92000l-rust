@@ -240,7 +240,7 @@ impl Client {
             Some(id) => Ok(Fid {
                 client: self.clone(),
                 needs_clunk: false,
-                id: id,
+                id,
             }),
             None => Err(err_other("fids exhausted")),
         }
@@ -319,7 +319,7 @@ impl Fid {
     pub fn walk(&self, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, Fid), std::io::Error> {
         let mut wqids = Vec::with_capacity(fcall::MAXWELEM);
         if wnames.is_empty() {
-            return self.walk1(&wnames);
+            return self.walk1(wnames);
         }
         let mut f = None;
         for wnames in wnames.chunks(fcall::MAXWELEM) {
@@ -519,6 +519,17 @@ impl Fid {
         }
     }
 
+    pub fn lock(&mut self, flock: fcall::Flock) -> Result<fcall::LockStatus, std::io::Error> {
+        match self.client.fcall(Fcall::Tlock(fcall::Tlock {
+            fid: self.id,
+            flock,
+        }))? {
+            Fcall::Rlock(fcall::Rlock { status }) => Ok(status),
+            Fcall::Rlerror(err) => Err(err.into_io_error()),
+            _ => Err(err_unexpected_response()),
+        }
+    }
+
     fn _clunk(&mut self) -> Result<(), std::io::Error> {
         if !self.needs_clunk {
             return Ok(());
@@ -531,17 +542,6 @@ impl Fid {
                 self.needs_clunk = false;
                 Ok(())
             }
-            Fcall::Rlerror(err) => Err(err.into_io_error()),
-            _ => Err(err_unexpected_response()),
-        }
-    }
-
-    pub fn lock(&mut self, flock: fcall::Flock) -> Result<fcall::LockStatus, std::io::Error> {
-        match self.client.fcall(Fcall::Tlock(fcall::Tlock {
-            fid: self.id,
-            flock,
-        }))? {
-            Fcall::Rlock(fcall::Rlock { status }) => Ok(status),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }
