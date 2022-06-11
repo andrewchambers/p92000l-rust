@@ -7,6 +7,5 @@ edition = "2021"
 [dependencies]
 
 nix = "0.20"
-enum_primitive = "0.1"
 bitflags = "1.2"
 crossbeam-channel = "0.5"

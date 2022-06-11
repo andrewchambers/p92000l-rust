@@ -539,9 +539,7 @@ impl Fid {
             .client
             .fcall(Fcall::Tclunk(fcall::Tclunk { fid: self.id }))?
         {
-            Fcall::Rclunk { .. } => {
-                Ok(())
-            }
+            Fcall::Rclunk { .. } => Ok(()),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }
@@ -557,9 +555,7 @@ impl Fid {
             .client
             .fcall(Fcall::Tremove(fcall::Tremove { fid: self.id }))?
         {
-            Fcall::Rremove { .. } => {
-                Ok(())
-            }
+            Fcall::Rremove { .. } => Ok(()),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }

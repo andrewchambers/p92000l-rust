@@ -1,11 +1,14 @@
-use log::{debug, error, info, log_enabled, Level};
+use log::{debug, error, info};
 use p92000::fcall;
-use p92000::fcall::Fcall;
+use p92000::fcall::{Fcall, FcallType};
 use p92000::lerrno;
 use std::collections::HashMap;
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::ops::Add;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time;
 
 struct ProxyState {
     server_addr: String,
@@ -37,98 +40,119 @@ impl ShadowServerState {
         }
     }
 
-    fn on_fcall(&mut self, tagged_fcall: &fcall::TaggedFcall) {
-        match &tagged_fcall.fcall {
-            Fcall::Tattach(tattach) => {
-                self.inflight_tags.insert(
-                    tagged_fcall.tag,
-                    AttachChange::AddOnSuccess((tattach.fid, tattach.clone_static())),
-                );
+    fn on_fcall(&mut self, buf: &[u8]) {
+        let fcall_type = match FcallType::from_u8(buf[4]) {
+            Some(t) => t,
+            None => return,
+        };
+        // For speed, we often don't even both decoding the full buffer.
+        match fcall_type {
+            FcallType::Tattach | FcallType::Tclunk | FcallType::Tremove => {
+                if let Ok(tagged_fcall) = fcall::TaggedFcall::decode(buf) {
+                    match &tagged_fcall.fcall {
+                        Fcall::Tattach(tattach) => {
+                            self.inflight_tags.insert(
+                                tagged_fcall.tag,
+                                AttachChange::AddOnSuccess(
+                                    (tattach.fid, tattach.clone_static())
+                                ),
+                            );
+                        }
+                        Fcall::Tclunk(fcall::Tclunk { fid }) => {
+                            self
+                            .inflight_tags
+                            .insert(tagged_fcall.tag, AttachChange::Remove(*fid));
+                        }
+                        Fcall::Tremove(fcall::Tremove { fid }) => {
+                            self
+                            .inflight_tags
+                            .insert(tagged_fcall.tag, AttachChange::Remove(*fid));
+                        }
+                        _ => (),
+                    }
+                }
             }
-            Fcall::Tclunk(fcall::Tclunk { fid }) => {
+            FcallType::Twalk // For now we simply ignore clones of attach points.
+            | FcallType::Tstatfs
+            | FcallType::Tlopen
+            | FcallType::Tlcreate
+            | FcallType::Tsymlink
+            | FcallType::Tmknod
+            | FcallType::Treadlink
+            | FcallType::Tgetattr
+            | FcallType::Tsetattr
+            | FcallType::Treaddir
+            | FcallType::Tfsync
+            | FcallType::Tmkdir
+            | FcallType::Tflush
+            | FcallType::Tread
+            | FcallType::Twrite
+            | FcallType::Trename
+            | FcallType::Tlink
+            | FcallType::Trenameat
+            | FcallType::Tunlinkat
+            | FcallType::Tlock
+            | FcallType::Tgetlock
+            | FcallType::Tauth
+            | FcallType::Txattrwalk
+            | FcallType::Txattrcreate
+            | FcallType::Tversion => {
+                let tag = u16::from_le_bytes(buf[5..7].try_into().unwrap());
                 self
                 .inflight_tags
-                .insert(tagged_fcall.tag, AttachChange::Remove(*fid));
+                .insert(tag, AttachChange::None);
             }
-            Fcall::Tremove(fcall::Tremove { fid }) => {
-                self
-                .inflight_tags
-                .insert(tagged_fcall.tag, AttachChange::Remove(*fid));
+             FcallType::Rwalk
+            | FcallType::Rstatfs
+            | FcallType::Rlopen
+            | FcallType::Rlcreate
+            | FcallType::Rsymlink
+            | FcallType::Rmknod
+            | FcallType::Rreadlink
+            | FcallType::Rgetattr
+            | FcallType::Rsetattr
+            | FcallType::Rreaddir
+            | FcallType::Rfsync
+            | FcallType::Rmkdir
+            | FcallType::Rflush
+            | FcallType::Rread
+            | FcallType::Rwrite
+            | FcallType::Rrename
+            | FcallType::Rlink
+            | FcallType::Rrenameat
+            | FcallType::Runlinkat
+            | FcallType::Rlock
+            | FcallType::Rgetlock
+            | FcallType::Rauth
+            | FcallType::Rattach
+            | FcallType::Rxattrwalk
+            | FcallType::Rxattrcreate
+            | FcallType::Rversion
+            | FcallType::Rremove
+            | FcallType::Rclunk => {
+                let tag = u16::from_le_bytes(buf[5..7].try_into().unwrap());
+                match self.inflight_tags.remove(&tag) {
+                    Some(AttachChange::AddOnSuccess((fid, tattach))) => {
+                        self.attach_fids.insert(fid, tattach);
+                    }
+                    Some(AttachChange::Remove(fid)) => {
+                        self.attach_fids.remove(&fid);
+                    }
+                    Some(AttachChange::None) => (),
+                    None => (),
+                }
             }
-            Fcall::Twalk(_) // For now we simply ignore clones.
-            | Fcall::Tstatfs(_)
-            | Fcall::Tlopen(_)
-            | Fcall::Tlcreate(_)
-            | Fcall::Tsymlink(_)
-            | Fcall::Tmknod(_)
-            | Fcall::Treadlink(_)
-            | Fcall::Tgetattr(_)
-            | Fcall::Tsetattr(_)
-            | Fcall::Treaddir(_)
-            | Fcall::Tfsync(_)
-            | Fcall::Tmkdir(_)
-            | Fcall::Tflush(_)
-            | Fcall::Tread(_)
-            | Fcall::Twrite(_)
-            | Fcall::Trename(_)
-            | Fcall::Tlink(_)
-            | Fcall::Trenameat(_)
-            | Fcall::Tunlinkat(_)
-            | Fcall::Tlock(_)
-            | Fcall::Tgetlock(_)
-            | Fcall::Tauth(_)
-            | Fcall::Txattrwalk(_)
-            | Fcall::Txattrcreate(_)
-            | Fcall::Tversion(_) => {
-                self
-                .inflight_tags
-                .insert(tagged_fcall.tag, AttachChange::None);
-            }
-             Fcall::Rwalk(_)
-            | Fcall::Rstatfs(_)
-            | Fcall::Rlopen(_)
-            | Fcall::Rlcreate(_)
-            | Fcall::Rsymlink(_)
-            | Fcall::Rmknod(_)
-            | Fcall::Rreadlink(_)
-            | Fcall::Rgetattr(_)
-            | Fcall::Rsetattr(_)
-            | Fcall::Rreaddir(_)
-            | Fcall::Rfsync(_)
-            | Fcall::Rmkdir(_)
-            | Fcall::Rflush(_)
-            | Fcall::Rread(_)
-            | Fcall::Rwrite(_)
-            | Fcall::Rrename(_)
-            | Fcall::Rlink(_)
-            | Fcall::Rrenameat(_)
-            | Fcall::Runlinkat(_)
-            | Fcall::Rlock(_)
-            | Fcall::Rgetlock(_)
-            | Fcall::Rauth(_)
-            | Fcall::Rattach(_)
-            | Fcall::Rxattrwalk(_)
-            | Fcall::Rxattrcreate(_)
-            | Fcall::Rversion(_)
-            | Fcall::Rremove(_)
-            | Fcall::Rclunk(_) => match self.inflight_tags.remove(&tagged_fcall.tag) {
-                Some(AttachChange::AddOnSuccess((fid, tattach))) => {
-                    self.attach_fids.insert(fid, tattach);
+            FcallType::Rlerror => {
+                let tag = u16::from_le_bytes(buf[5..7].try_into().unwrap());
+                match self.inflight_tags.remove(&tag) {
+                    Some(AttachChange::Remove(fid)) => {
+                        self.attach_fids.remove(&fid);
+                    }
+                    // Operation failed, no new attach.
+                    Some(AttachChange::AddOnSuccess(_)) => (),
+                    Some(AttachChange::None) => (),
+                    None => (),
                 }
-                Some(AttachChange::Remove(fid)) => {
-                    self.attach_fids.remove(&fid);
-                }
-                Some(AttachChange::None) => (),
-                None => (),
-            },
-            Fcall::Rlerror(_) => match self.inflight_tags.remove(&tagged_fcall.tag) {
-                Some(AttachChange::Remove(fid)) => {
-                    self.attach_fids.remove(&fid);
-                }
-                // Operation failed, no new attach.
-                Some(AttachChange::AddOnSuccess(_)) => (),
-                Some(AttachChange::None) => (),
-                None => (),
             },
         }
     }
@@ -138,16 +162,19 @@ fn initial_connect(
     mut client_conn: TcpStream,
     server_addr: String,
 ) -> Result<ProxyState, std::io::Error> {
-    let mut bufsize = 8192;
-    let mut rbuf = Vec::with_capacity(bufsize);
-    let mut wbuf = Vec::with_capacity(bufsize);
+    let mut fcall_buf = Vec::with_capacity(8192);
 
-    let tversion = match fcall::read(&mut client_conn, &mut rbuf)? {
+    let tversion = match fcall::read(&mut client_conn, &mut fcall_buf)? {
         fcall::TaggedFcall {
             tag: fcall::NOTAG,
             fcall: Fcall::Tversion(tversion),
-        } => tversion,
-        _ => todo!(),
+        } => tversion.clone_static(),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "9p protocol error, expected Tversion",
+            ))
+        }
     };
 
     info!("establishing initial connection to {}", &server_addr);
@@ -163,37 +190,42 @@ fn initial_connect(
 
         let mut server_conn = match TcpStream::connect(&server_addr) {
             Ok(conn) => conn,
-            Err(_) => continue,
+            Err(err) => {
+                error!("connection to {} failed: {}", &server_addr, err);
+                continue;
+            }
         };
 
-        if fcall::write(
+        if let Err(err) = fcall::write(
             &mut server_conn,
-            &mut wbuf,
+            &mut fcall_buf,
             &fcall::TaggedFcall {
                 tag: fcall::NOTAG,
                 fcall: Fcall::Tversion(tversion.clone_static()),
             },
-        )
-        .is_err()
-        {
+        ) {
+            error!("error writing Tversion to {}: {}", &server_addr, err);
             continue;
         }
 
-        let rversion = match fcall::read(&mut server_conn, &mut rbuf)? {
+        let rversion = match fcall::read(&mut server_conn, &mut fcall_buf)? {
             fcall::TaggedFcall {
                 tag: fcall::NOTAG,
                 fcall: Fcall::Rversion(rversion),
             } => rversion.clone_static(),
-            _ => todo!(),
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "9p protocol error, expected Rversion",
+                ))
+            }
         };
 
-        bufsize = rversion.msize as usize;
-        rbuf.resize(bufsize, 0);
-        wbuf.resize(bufsize, 0);
+        fcall_buf.resize(rversion.msize as usize, 0);
 
         fcall::write(
             &mut client_conn,
-            &mut wbuf,
+            &mut fcall_buf,
             &fcall::TaggedFcall {
                 tag: fcall::NOTAG,
                 fcall: Fcall::Rversion(rversion.clone()),
@@ -211,8 +243,7 @@ fn initial_connect(
 }
 
 fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
-    let mut rbuf = Vec::with_capacity(state.rversion.msize as usize);
-    let mut wbuf = Vec::with_capacity(state.rversion.msize as usize);
+    let mut fcall_buf = Vec::with_capacity(state.rversion.msize as usize);
     let worker_server_state = state.server_state.clone();
 
     let (mut worker_client_conn, mut worker_server_conn) =
@@ -222,10 +253,10 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
         };
 
     let io_worker = std::thread::spawn(move || loop {
-        let tagged_fcall = match fcall::read(&mut worker_server_conn, &mut rbuf) {
-            Ok(tagged_fcall) => tagged_fcall,
+        match fcall::read_to_buf(&mut worker_server_conn, &mut fcall_buf) {
+            Ok(_) => (),
             Err(err) => {
-                error!("error reading from server: {}", err);
+                debug!("error reading from server: {}", err);
                 let _ = worker_server_conn.shutdown(std::net::Shutdown::Both);
                 break;
             }
@@ -233,13 +264,13 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
 
         {
             let mut server_state = worker_server_state.lock().unwrap();
-            server_state.on_fcall(&tagged_fcall);
+            server_state.on_fcall(&fcall_buf);
         }
 
-        match fcall::write(&mut worker_client_conn, &mut wbuf, &tagged_fcall) {
+        match worker_client_conn.write_all(&fcall_buf) {
             Ok(_) => (),
             Err(err) => {
-                error!("error writing to client: {}", err);
+                debug!("error writing to client: {}", err);
                 let _ = worker_server_conn.shutdown(std::net::Shutdown::Both);
                 let _ = worker_client_conn.shutdown(std::net::Shutdown::Both);
                 break;
@@ -247,14 +278,13 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
         }
     });
 
-    let mut rbuf = Vec::with_capacity(state.rversion.msize as usize);
-    let mut wbuf = Vec::with_capacity(state.rversion.msize as usize);
+    let mut fcall_buf = Vec::with_capacity(state.rversion.msize as usize);
 
     loop {
-        let tagged_fcall = match fcall::read(&mut state.client_conn, &mut rbuf) {
-            Ok(tagged_fcall) => tagged_fcall,
+        match fcall::read_to_buf(&mut state.client_conn, &mut fcall_buf) {
+            Ok(_) => (),
             Err(err) => {
-                error!("error reading from client: {}", err);
+                debug!("error reading from client: {}", err);
                 let _ = state.server_conn.shutdown(std::net::Shutdown::Both);
                 let _ = state.client_conn.shutdown(std::net::Shutdown::Both);
                 io_worker.join().unwrap();
@@ -264,13 +294,13 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
 
         {
             let mut server_state = state.server_state.lock().unwrap();
-            server_state.on_fcall(&tagged_fcall);
+            server_state.on_fcall(&fcall_buf);
         }
 
-        match fcall::write(&mut state.server_conn, &mut wbuf, &tagged_fcall) {
+        match state.server_conn.write_all(&fcall_buf) {
             Ok(_) => (),
             Err(err) => {
-                error!("error writing to server: {}", err);
+                debug!("error writing to server: {}", err);
                 let _ = state.server_conn.shutdown(std::net::Shutdown::Both);
                 io_worker.join().unwrap();
                 return Ok(());
@@ -279,10 +309,63 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
     }
 }
 
-fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
-    let mut rbuf = Vec::with_capacity(state.rversion.msize as usize);
-    let mut wbuf = Vec::with_capacity(state.rversion.msize as usize);
+fn client_eio_until(
+    client_conn: &mut TcpStream,
+    server_state: &mut ShadowServerState,
+    fcall_buf: &mut Vec<u8>,
+    delay: time::Duration,
+) -> Result<(), std::io::Error> {
+    let deadline = time::Instant::now().add(delay);
 
+    loop {
+        let now = time::Instant::now();
+        if now >= deadline {
+            break;
+        }
+
+        // Sleep until deadline, handling any incoming packets.
+        client_conn.set_read_timeout(Some(deadline - now))?;
+        fcall_buf.resize(4, 0);
+
+        match client_conn.read(&mut fcall_buf[..4]) {
+            Ok(n) => {
+                client_conn.set_read_timeout(None)?;
+                if n < 4 {
+                    client_conn.read_exact(&mut fcall_buf[n..4])?;
+                }
+            }
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => continue,
+                _ => return Err(err),
+            },
+        };
+
+        let sz = u32::from_le_bytes(fcall_buf[..4].try_into().unwrap()) as usize;
+        if sz > fcall_buf.capacity() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "9p remote violated protocol size limit",
+            ));
+        }
+
+        fcall_buf.resize(sz, 0);
+        client_conn.read_exact(&mut fcall_buf[4..sz])?;
+        server_state.on_fcall(fcall_buf);
+        let resp = fcall::TaggedFcall {
+            tag: u16::from_le_bytes(fcall_buf[5..7].try_into().unwrap()),
+            fcall: Fcall::Rlerror(fcall::Rlerror { ecode: lerrno::EIO }),
+        };
+        resp.encode_to_buf(fcall_buf)?;
+        server_state.on_fcall(fcall_buf); // Ensure failed clunks are respected.
+        client_conn.write_all(fcall_buf)?;
+    }
+
+    client_conn.set_read_timeout(None)?;
+    Ok(())
+}
+
+fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
+    let mut fcall_buf = Vec::with_capacity(state.rversion.msize as usize);
     let mut server_state = state.server_state.lock().unwrap();
 
     // Answer remaining in flight calls expecting a response with an error.
@@ -290,7 +373,7 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
         debug!("cancelling inflight tag {} with EIO", tag);
         fcall::write(
             &mut state.client_conn,
-            &mut wbuf,
+            &mut fcall_buf,
             &fcall::TaggedFcall {
                 tag,
                 fcall: Fcall::Rlerror(fcall::Rlerror { ecode: lerrno::EIO }),
@@ -303,8 +386,15 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
         if first_attempt {
             first_attempt = false;
         } else {
-            std::thread::sleep(std::time::Duration::from_millis(1000));
+            // While we are disconnected, reply to all requests with EIO.
+            client_eio_until(
+                &mut state.client_conn,
+                &mut server_state,
+                &mut fcall_buf,
+                time::Duration::from_millis(1000),
+            )?;
         }
+
         info!("attempting to reconnect to {}", &state.server_addr);
 
         state.server_conn = match TcpStream::connect(&state.server_addr) {
@@ -318,7 +408,7 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
         // Resend the version, use the rversion we initially got.
         if let Err(err) = fcall::write(
             &mut state.server_conn,
-            &mut wbuf,
+            &mut fcall_buf,
             &fcall::TaggedFcall {
                 tag: fcall::NOTAG,
                 fcall: Fcall::Tversion(fcall::Tversion {
@@ -331,17 +421,25 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
             continue;
         }
 
-        let rversion = match fcall::read(&mut state.server_conn, &mut rbuf)? {
+        let rversion = match fcall::read(&mut state.server_conn, &mut fcall_buf)? {
             fcall::TaggedFcall {
                 tag: fcall::NOTAG,
                 fcall: Fcall::Rversion(rversion),
             } => rversion.clone_static(),
-            _ => todo!(),
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "9p protocol error, expected Rversion",
+                ))
+            }
         };
 
         if rversion.msize < state.rversion.msize || rversion.version != state.rversion.version {
             // The server has changed it's parameters, we must abort.
-            todo!()
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "server resized buffers on reconnect",
+            ));
         }
 
         // Restablish attach fids.
@@ -353,7 +451,7 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
 
             if let Err(err) = fcall::write(
                 &mut state.server_conn,
-                &mut wbuf,
+                &mut fcall_buf,
                 &fcall::TaggedFcall {
                     tag: fcall::NOTAG,
                     fcall: Fcall::Tattach(fcall::Tattach {
@@ -366,12 +464,17 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
                 continue;
             }
 
-            match fcall::read(&mut state.server_conn, &mut rbuf)? {
+            match fcall::read(&mut state.server_conn, &mut fcall_buf)? {
                 fcall::TaggedFcall {
                     tag: fcall::NOTAG,
                     fcall: Fcall::Rattach(_),
                 } => (),
-                _ => todo!(),
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "9p protocol error, expected Rattach",
+                    ))
+                }
             };
         }
 
@@ -440,10 +543,10 @@ fn main() {
 
     let listen_addr = matches
         .opt_str("from")
-        .unwrap_or("localhost:5030".to_string());
+        .unwrap_or_else(|| "localhost:5030".to_string());
     let server_addr = matches
         .opt_str("to")
-        .unwrap_or("localhost:5031".to_string());
+        .unwrap_or_else(|| "localhost:5031".to_string());
 
     info!("listening on {}, proxying to {}", listen_addr, server_addr);
     let listener = match TcpListener::bind(listen_addr) {
@@ -461,7 +564,15 @@ fn main() {
             if let Ok(peer) = client_conn.peer_addr() {
                 info!("new connection from {}", peer);
             }
-            let _ = handle_connection(client_conn, server_addr);
+            if let Err(err) = handle_connection(client_conn, server_addr) {
+                match err.kind() {
+                    std::io::ErrorKind::UnexpectedEof
+                    | std::io::ErrorKind::BrokenPipe
+                    | std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::ConnectionReset => (),
+                    _ => error!("connection terminated with error: {}", err),
+                }
+            };
         });
     }
 }
