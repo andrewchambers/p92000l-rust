@@ -376,17 +376,15 @@ pub trait ThreadedFilesystem {
 pub struct ThreadPoolServer<Fs: 'static + ThreadedFilesystem + Send + Sync> {
     fs: Arc<Fs>,
     workers: Vec<std::thread::JoinHandle<()>>,
-    dispatch_tx: crossbeam_channel::Sender<Box<dyn Send + FnOnce() -> ()>>,
+    dispatch_tx: crossbeam_channel::Sender<Box<dyn Send + FnOnce()>>,
 }
 
 impl<Fs: 'static + ThreadedFilesystem + Send + Sync> ThreadPoolServer<Fs> {
     pub fn new(fs: Fs) -> ThreadPoolServer<Fs> {
         let mut workers = Vec::new();
 
-        let (dispatch_tx, dispatch_rx): (
-            crossbeam_channel::Sender<Box<dyn Send + FnOnce() -> ()>>,
-            crossbeam_channel::Receiver<Box<dyn Send + FnOnce() -> ()>>,
-        ) = crossbeam_channel::bounded(0);
+        let (dispatch_tx, dispatch_rx): (crossbeam_channel::Sender<Box<dyn Send + FnOnce()>>, _) =
+            crossbeam_channel::bounded(0);
 
         const N_WORKERS: usize = 8;
         for _i in 0..N_WORKERS {
@@ -406,7 +404,7 @@ impl<Fs: 'static + ThreadedFilesystem + Send + Sync> ThreadPoolServer<Fs> {
         }
     }
 
-    fn dispatch(&mut self, f: Box<dyn Send + FnOnce() -> ()>) {
+    fn dispatch(&mut self, f: Box<dyn Send + FnOnce()>) {
         let _ = self.dispatch_tx.send(f);
     }
 }

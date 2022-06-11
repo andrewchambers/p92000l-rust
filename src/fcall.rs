@@ -1774,7 +1774,7 @@ impl<'a> TaggedFcall<'a> {
     }
 }
 
-pub fn read_to_buf<'a, R: Read>(r: &mut R, buf: &'a mut Vec<u8>) -> std::io::Result<()> {
+pub fn read_to_buf<R: Read>(r: &mut R, buf: &mut Vec<u8>) -> std::io::Result<()> {
     buf.resize(4, 0);
     r.read_exact(&mut buf[..])?;
     let sz = u32::from_le_bytes(buf[..4].try_into().unwrap()) as usize;
@@ -2379,7 +2379,7 @@ fn invalid_9p_msg() -> std::io::Error {
 
 impl<'a, 'b: 'a> FcallDecoder<'b> {
     fn decode_u8(&'a mut self) -> std::io::Result<u8> {
-        if let Some(v) = self.buf.get(0) {
+        if let Some(v) = self.buf.first() {
             self.buf = &self.buf[1..];
             Ok(*v)
         } else {
