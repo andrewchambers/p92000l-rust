@@ -260,8 +260,7 @@ impl<'b> Default for DirEntryData<'b> {
 #[derive(Copy, Clone, Debug)]
 pub enum FcallType {
     // 9P2000.L
-    // Tlerror = 6,
-    Rlerror,
+    Rlerror = 7,
     Tstatfs = 8,
     Rstatfs,
     Tlopen = 12,
@@ -407,82 +406,6 @@ impl FcallType {
             // 126 => Some(FcallType::Twstat),
             // 126 => Some(FcallType::Rwstat),
             _ => None,
-        }
-    }
-
-    pub fn as_u8(&self) -> u8 {
-        match self {
-            // 9P2000.L
-            // FcallType::Tlerror => 6,
-            FcallType::Rlerror => 7,
-            FcallType::Tstatfs => 8,
-            FcallType::Rstatfs => 9,
-            FcallType::Tlopen => 12,
-            FcallType::Rlopen => 13,
-            FcallType::Tlcreate => 14,
-            FcallType::Rlcreate => 15,
-            FcallType::Tsymlink => 16,
-            FcallType::Rsymlink => 17,
-            FcallType::Tmknod => 18,
-            FcallType::Rmknod => 19,
-            FcallType::Trename => 20,
-            FcallType::Rrename => 21,
-            FcallType::Treadlink => 22,
-            FcallType::Rreadlink => 23,
-            FcallType::Tgetattr => 24,
-            FcallType::Rgetattr => 25,
-            FcallType::Tsetattr => 26,
-            FcallType::Rsetattr => 27,
-            FcallType::Txattrwalk => 30,
-            FcallType::Rxattrwalk => 31,
-            FcallType::Txattrcreate => 32,
-            FcallType::Rxattrcreate => 33,
-            FcallType::Treaddir => 40,
-            FcallType::Rreaddir => 41,
-            FcallType::Tfsync => 50,
-            FcallType::Rfsync => 51,
-            FcallType::Tlock => 52,
-            FcallType::Rlock => 53,
-            FcallType::Tgetlock => 54,
-            FcallType::Rgetlock => 55,
-            FcallType::Tlink => 70,
-            FcallType::Rlink => 71,
-            FcallType::Tmkdir => 72,
-            FcallType::Rmkdir => 73,
-            FcallType::Trenameat => 74,
-            FcallType::Rrenameat => 75,
-            FcallType::Tunlinkat => 76,
-            FcallType::Runlinkat => 77,
-
-            // 9P2000
-            FcallType::Tversion => 100,
-            FcallType::Rversion => 101,
-            FcallType::Tauth => 102,
-            FcallType::Rauth => 103,
-            FcallType::Tattach => 104,
-            FcallType::Rattach => 105,
-            // FcallType::Terror => 106,
-            // FcallType::Rerror => 107,
-            FcallType::Tflush => 108,
-            FcallType::Rflush => 109,
-            FcallType::Twalk => 110,
-            FcallType::Rwalk => 111,
-            // FcallType::Topen => 112,
-            // FcallType::Ropen => 113,
-            // FcallType::Tcreate => 114,
-            // FcallType::Rcreate  => 115,
-            FcallType::Tread => 116,
-            FcallType::Rread => 117,
-            FcallType::Twrite => 118,
-            FcallType::Rwrite => 119,
-            FcallType::Tclunk => 120,
-            FcallType::Rclunk => 121,
-            FcallType::Tremove => 122,
-            FcallType::Rremove => 123,
-            // FcallType::Tstat => 124,
-            // FcallType::Rstat => 125,
-            // FcallType::Twstat => 126,
-            // FcallType::Rwstat => 127,
         }
     }
 }
@@ -1700,7 +1623,7 @@ impl<'a> TaggedFcall<'a> {
         let mut w = std::io::Cursor::new(buf);
         w.write_all(&[0, 0, 0, 0])?;
         let typ = FcallType::from(&self.fcall);
-        encode_u8(&mut w, typ.as_u8())?;
+        encode_u8(&mut w, typ as u8)?;
         encode_u16(&mut w, self.tag)?;
         match self.fcall {
             Fcall::Rlerror(ref v) => encode_rlerror(&mut w, v)?,
