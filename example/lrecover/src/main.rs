@@ -3,7 +3,7 @@ use p92000::fcall;
 use p92000::fcall::{Fcall, FcallType};
 use p92000::lerrno;
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::ops::Add;
 use std::sync::Arc;
@@ -324,32 +324,12 @@ fn client_eio_until(
         }
 
         // Sleep until deadline, handling any incoming packets.
-        client_conn.set_read_timeout(Some(deadline - now))?;
-        fcall_buf.resize(4, 0);
-
-        match client_conn.read(&mut fcall_buf[..4]) {
-            Ok(n) => {
-                client_conn.set_read_timeout(None)?;
-                if n < 4 {
-                    client_conn.read_exact(&mut fcall_buf[n..4])?;
-                }
-            }
-            Err(err) => match err.kind() {
-                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => continue,
-                _ => return Err(err),
-            },
+        match fcall::read_to_buf_timeout(client_conn, fcall_buf, deadline - now) {
+            Ok(_) => (),
+            Err(err) if err.kind() == std::io::ErrorKind::TimedOut => continue,
+            Err(err) => return Err(err),
         };
 
-        let sz = u32::from_le_bytes(fcall_buf[..4].try_into().unwrap()) as usize;
-        if sz > fcall_buf.capacity() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "9p remote violated protocol size limit",
-            ));
-        }
-
-        fcall_buf.resize(sz, 0);
-        client_conn.read_exact(&mut fcall_buf[4..sz])?;
         server_state.on_fcall(fcall_buf);
         let resp = fcall::TaggedFcall {
             tag: u16::from_le_bytes(fcall_buf[5..7].try_into().unwrap()),

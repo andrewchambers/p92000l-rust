@@ -1789,6 +1789,48 @@ pub fn read_to_buf<R: Read>(r: &mut R, buf: &mut Vec<u8>) -> std::io::Result<()>
     Ok(())
 }
 
+// Returns std::io::ErrorKind::TimedOut on timeout.
+pub fn read_to_buf_timeout(
+    conn: &mut std::net::TcpStream,
+    fcall_buf: &mut Vec<u8>,
+    timeout: std::time::Duration,
+) -> Result<(), std::io::Error> {
+    let old_timeout = conn.read_timeout()?;
+    conn.set_read_timeout(Some(timeout))?;
+
+    fcall_buf.resize(4, 0);
+    let read_result = conn.read(&mut fcall_buf[..4]);
+
+    conn.set_read_timeout(old_timeout)?;
+
+    match read_result {
+        Ok(n) => {
+            if n < 4 {
+                conn.read_exact(&mut fcall_buf[n..4])?;
+            }
+        }
+        Err(err) => match err.kind() {
+            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => {
+                return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
+            }
+            _ => return Err(err),
+        },
+    };
+
+    let sz = u32::from_le_bytes(fcall_buf[..4].try_into().unwrap()) as usize;
+    if sz > fcall_buf.capacity() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "9p remote violated protocol size limit",
+        ));
+    }
+
+    fcall_buf.resize(sz, 0);
+    conn.read_exact(&mut fcall_buf[4..sz])?;
+
+    Ok(())
+}
+
 pub fn read<'a, R: Read>(
     r: &mut R,
     buf: &'a mut Vec<u8>,
