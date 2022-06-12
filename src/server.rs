@@ -1,6 +1,6 @@
 use super::fcall;
 use super::fcall::*;
-use super::lerrno;
+use super::errno;
 use std::borrow::Cow;
 use std::boxed::Box;
 use std::ops::DerefMut;
@@ -40,7 +40,7 @@ impl<'a> Response {
 impl Drop for Response {
     fn drop(&mut self) {
         if self.tag != fcall::NOTAG {
-            self._send(Rlerror { ecode: lerrno::EIO }.into())
+            self._send(Rlerror { ecode: errno::EIO }.into())
         }
     }
 }
@@ -48,163 +48,163 @@ impl Drop for Response {
 pub trait Filesystem {
     fn statfs(&mut self, _req: &Tstatfs, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn lopen(&mut self, _req: &Tlopen, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn lcreate(&mut self, _req: &Tlcreate, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn symlink(&mut self, _req: &Tsymlink, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn mknod(&mut self, _req: &Tmknod, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn rename(&mut self, _req: &Trename, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn readlink(&mut self, _req: &Treadlink, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn getattr(&mut self, _req: &Tgetattr, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn setattr(&mut self, _req: &Tsetattr, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn xattrwalk(&mut self, _req: &Txattrwalk, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn xattrcreate(&mut self, _req: &Txattrcreate, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn readdir(&mut self, _req: &Treaddir, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn fsync(&mut self, _req: &Tfsync, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn lock(&mut self, _req: &Tlock, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn getlock(&mut self, _req: &Tgetlock, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn link(&mut self, _req: &Tlink, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn mkdir(&mut self, _req: &Tmkdir, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn renameat(&mut self, _req: &Trenameat, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn unlinkat(&mut self, _req: &Tunlinkat, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn auth(&mut self, _req: &Tauth, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn attach(&mut self, _req: &Tattach, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn flush(&mut self, _req: &Tflush, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn walk(&mut self, _req: &Twalk, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn read(&mut self, _req: &Tread, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn write(&mut self, _req: &Twrite, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn clunk(&mut self, _req: &Tclunk, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn remove(&mut self, _req: &Tremove, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 }
@@ -212,163 +212,163 @@ pub trait Filesystem {
 pub trait ThreadedFilesystem {
     fn statfs(&self, _req: &Tstatfs, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn lopen(&self, _req: &Tlopen, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn lcreate(&self, _req: &Tlcreate, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn symlink(&self, _req: &Tsymlink, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn mknod(&self, _req: &Tmknod, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn rename(&self, _req: &Trename, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn readlink(&self, _req: &Treadlink, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn getattr(&self, _req: &Tgetattr, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn setattr(&self, _req: &Tsetattr, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn xattrwalk(&self, _req: &Txattrwalk, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn xattrcreate(&self, _req: &Txattrcreate, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn readdir(&self, _req: &Treaddir, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn fsync(&self, _req: &Tfsync, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn lock(&self, _req: &Tlock, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn getlock(&self, _req: &Tgetlock, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn link(&self, _req: &Tlink, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn mkdir(&self, _req: &Tmkdir, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn renameat(&self, _req: &Trenameat, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn unlinkat(&self, _req: &Tunlinkat, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn auth(&self, _req: &Tauth, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn attach(&self, _req: &Tattach, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn flush(&self, _req: &Tflush, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn walk(&self, _req: &Twalk, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn read(&self, _req: &Tread, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn write(&self, _req: &Twrite, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn clunk(&self, _req: &Tclunk, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 
     fn remove(&self, _req: &Tremove, resp: Response) {
         resp.send(Rlerror {
-            ecode: lerrno::EOPNOTSUPP,
+            ecode: errno::EOPNOTSUPP,
         })
     }
 }

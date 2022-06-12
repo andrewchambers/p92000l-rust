@@ -499,52 +499,52 @@ pub struct Rlerror {
 
 impl Rlerror {
     pub fn into_io_error(self) -> std::io::Error {
-        use super::lerrno;
+        use super::errno;
         use std::io::Error;
         use std::io::ErrorKind::*;
 
         match self.ecode {
-            lerrno::ENOENT => Error::from(NotFound),
-            lerrno::EPERM => Error::from(PermissionDenied),
-            lerrno::ECONNREFUSED => Error::from(ConnectionRefused),
-            lerrno::ECONNRESET => Error::from(ConnectionReset),
-            lerrno::ECONNABORTED => Error::from(ConnectionAborted),
-            lerrno::ENOTCONN => Error::from(NotConnected),
-            lerrno::EADDRINUSE => Error::from(AddrInUse),
-            lerrno::EADDRNOTAVAIL => Error::from(AddrNotAvailable),
-            lerrno::EPIPE => Error::from(BrokenPipe),
-            lerrno::EALREADY => Error::from(AlreadyExists),
-            lerrno::EINVAL => Error::from(InvalidInput),
-            lerrno::ETIMEDOUT => Error::from(TimedOut),
-            lerrno::EINTR => Error::from(Interrupted),
-            ecode => Error::new(Other, lerrno::strerror(ecode)),
+            errno::ENOENT => Error::from(NotFound),
+            errno::EPERM => Error::from(PermissionDenied),
+            errno::ECONNREFUSED => Error::from(ConnectionRefused),
+            errno::ECONNRESET => Error::from(ConnectionReset),
+            errno::ECONNABORTED => Error::from(ConnectionAborted),
+            errno::ENOTCONN => Error::from(NotConnected),
+            errno::EADDRINUSE => Error::from(AddrInUse),
+            errno::EADDRNOTAVAIL => Error::from(AddrNotAvailable),
+            errno::EPIPE => Error::from(BrokenPipe),
+            errno::EALREADY => Error::from(AlreadyExists),
+            errno::EINVAL => Error::from(InvalidInput),
+            errno::ETIMEDOUT => Error::from(TimedOut),
+            errno::EINTR => Error::from(Interrupted),
+            ecode => Error::new(Other, errno::strerror(ecode)),
         }
     }
 }
 
 impl From<std::io::Error> for Rlerror {
     fn from(err: std::io::Error) -> Self {
-        use super::lerrno;
+        use super::errno;
         use std::io::ErrorKind::*;
 
         let ecode = match err.kind() {
-            NotFound => lerrno::ENOENT,
-            PermissionDenied => lerrno::EPERM,
-            ConnectionRefused => lerrno::ECONNREFUSED,
-            ConnectionReset => lerrno::ECONNRESET,
-            ConnectionAborted => lerrno::ECONNABORTED,
-            NotConnected => lerrno::ENOTCONN,
-            AddrInUse => lerrno::EADDRINUSE,
-            AddrNotAvailable => lerrno::EADDRNOTAVAIL,
-            BrokenPipe => lerrno::EPIPE,
-            AlreadyExists => lerrno::EALREADY,
-            WouldBlock => lerrno::EAGAIN,
-            InvalidInput => lerrno::EINVAL,
-            InvalidData => lerrno::EINVAL,
-            TimedOut => lerrno::ETIMEDOUT,
-            WriteZero => lerrno::EAGAIN,
-            Interrupted => lerrno::EINTR,
-            _ => lerrno::EIO,
+            NotFound => errno::ENOENT,
+            PermissionDenied => errno::EPERM,
+            ConnectionRefused => errno::ECONNREFUSED,
+            ConnectionReset => errno::ECONNRESET,
+            ConnectionAborted => errno::ECONNABORTED,
+            NotConnected => errno::ENOTCONN,
+            AddrInUse => errno::EADDRINUSE,
+            AddrNotAvailable => errno::EADDRNOTAVAIL,
+            BrokenPipe => errno::EPIPE,
+            AlreadyExists => errno::EALREADY,
+            WouldBlock => errno::EAGAIN,
+            InvalidInput => errno::EINVAL,
+            InvalidData => errno::EINVAL,
+            TimedOut => errno::ETIMEDOUT,
+            WriteZero => errno::EAGAIN,
+            Interrupted => errno::EINTR,
+            _ => errno::EIO,
         };
 
         Rlerror { ecode }
