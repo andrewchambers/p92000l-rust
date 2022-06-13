@@ -1,7 +1,7 @@
 use log::{debug, error, info};
-use p92000::fcall;
-use p92000::fcall::{Fcall, FcallType};
-use p92000::lerrno;
+use p92000l::fcall;
+use p92000l::fcall::{Fcall, FcallType};
+use p92000l::errno;
 use std::collections::HashMap;
 use std::io::Write;
 use std::net::{TcpListener, TcpStream};
@@ -333,7 +333,7 @@ fn client_eio_until(
         server_state.on_fcall(fcall_buf);
         let resp = fcall::TaggedFcall {
             tag: u16::from_le_bytes(fcall_buf[5..7].try_into().unwrap()),
-            fcall: Fcall::Rlerror(fcall::Rlerror { ecode: lerrno::EIO }),
+            fcall: Fcall::Rlerror(fcall::Rlerror { ecode: errno::EIO }),
         };
         resp.encode_to_buf(fcall_buf)?;
         server_state.on_fcall(fcall_buf); // Ensure failed clunks are respected.
@@ -356,7 +356,7 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
             &mut fcall_buf,
             &fcall::TaggedFcall {
                 tag,
-                fcall: Fcall::Rlerror(fcall::Rlerror { ecode: lerrno::EIO }),
+                fcall: Fcall::Rlerror(fcall::Rlerror { ecode: errno::EIO }),
             },
         )?;
     }
