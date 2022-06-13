@@ -1,10 +1,9 @@
 use log::{debug, error, info};
 use p92000l;
-use p92000l::{Fcall, FcallType};
+use p92000l::{Fcall, FcallType, Socket, SocketAddr, SocketListener, Transport};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
-use std::net::{TcpListener, TcpStream};
 use std::ops::Add;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -12,8 +11,8 @@ use std::time;
 
 struct ProxyState {
     server_addr: String,
-    client_conn: TcpStream,
-    server_conn: TcpStream,
+    client_conn: Socket,
+    server_conn: Socket,
     rversion: p92000l::Rversion<'static>,
     server_state: Arc<Mutex<ShadowServerState>>,
 }
@@ -159,7 +158,7 @@ impl ShadowServerState {
 }
 
 fn initial_connect(
-    mut client_conn: TcpStream,
+    mut client_conn: Socket,
     server_addr: String,
 ) -> Result<ProxyState, std::io::Error> {
     let mut fcall_buf = Vec::with_capacity(8192);
@@ -210,7 +209,18 @@ fn initial_connect(
             error!("retrying initial connection to {}", &server_addr);
         }
 
-        let mut server_conn = match TcpStream::connect(&server_addr) {
+        let resolved_addr = match SocketAddr::resolve(&server_addr) {
+            Ok(addr) => addr,
+            Err(err) => {
+                error!(
+                    "unable to resolve {} to an ip address: {}",
+                    &server_addr, err
+                );
+                continue;
+            }
+        };
+
+        let mut server_conn = match Socket::connect(&resolved_addr) {
             Ok(conn) => conn,
             Err(err) => {
                 error!("connection to {} failed: {}", &server_addr, err);
@@ -279,7 +289,7 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
             Ok(_) => (),
             Err(err) => {
                 debug!("error reading from server: {}", err);
-                let _ = worker_server_conn.shutdown(std::net::Shutdown::Both);
+                let _ = worker_server_conn.shutdown();
                 break;
             }
         };
@@ -293,8 +303,8 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
             Ok(_) => (),
             Err(err) => {
                 debug!("error writing to client: {}", err);
-                let _ = worker_server_conn.shutdown(std::net::Shutdown::Both);
-                let _ = worker_client_conn.shutdown(std::net::Shutdown::Both);
+                let _ = worker_server_conn.shutdown();
+                let _ = worker_client_conn.shutdown();
                 break;
             }
         }
@@ -307,8 +317,8 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
             Ok(_) => (),
             Err(err) => {
                 debug!("error reading from client: {}", err);
-                let _ = state.server_conn.shutdown(std::net::Shutdown::Both);
-                let _ = state.client_conn.shutdown(std::net::Shutdown::Both);
+                let _ = state.server_conn.shutdown();
+                let _ = state.client_conn.shutdown();
                 io_worker.join().unwrap();
                 return Err(err);
             }
@@ -323,7 +333,7 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
             Ok(_) => (),
             Err(err) => {
                 debug!("error writing to server: {}", err);
-                let _ = state.server_conn.shutdown(std::net::Shutdown::Both);
+                let _ = state.server_conn.shutdown();
                 io_worker.join().unwrap();
                 return Ok(());
             }
@@ -332,7 +342,7 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
 }
 
 fn client_eio_until(
-    client_conn: &mut TcpStream,
+    client_conn: &mut Socket,
     server_state: &mut ShadowServerState,
     fcall_buf: &mut Vec<u8>,
     delay: time::Duration,
@@ -403,7 +413,18 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
 
         info!("attempting to reconnect to {}", &state.server_addr);
 
-        state.server_conn = match TcpStream::connect(&state.server_addr) {
+        let resolved_addr = match SocketAddr::resolve(&state.server_addr) {
+            Ok(addr) => addr,
+            Err(err) => {
+                error!(
+                    "unable to resolve {} to an ip address: {}",
+                    &state.server_addr, err
+                );
+                continue;
+            }
+        };
+
+        state.server_conn = match Socket::connect(&resolved_addr) {
             Ok(conn) => conn,
             Err(err) => {
                 error!("reconnect to {} failed: {}", &state.server_addr, err);
@@ -489,7 +510,7 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
     }
 }
 
-fn handle_connection(client_conn: TcpStream, server_addr: String) -> Result<(), std::io::Error> {
+fn handle_connection(client_conn: Socket, server_addr: String) -> Result<(), std::io::Error> {
     let mut state = initial_connect(client_conn, server_addr)?;
     loop {
         proxy_connection(&mut state)?;
@@ -550,12 +571,31 @@ fn main() {
     let listen_addr = matches
         .opt_str("from")
         .unwrap_or_else(|| "localhost:5030".to_string());
+    let resolved_listen_addr = match SocketAddr::resolve(&listen_addr) {
+        Ok(addr) => addr,
+        Err(err) => {
+            eprintln!("unable to resolve 'from' address: {}", err);
+            std::process::exit(1)
+        }
+    };
+
     let server_addr = matches
         .opt_str("to")
         .unwrap_or_else(|| "localhost:5031".to_string());
+    // Sanity check.
+    let resolved_server_addr = match SocketAddr::resolve(&server_addr) {
+        Ok(addr) => addr,
+        Err(err) => {
+            eprintln!("unable to resolve 'to' address: {}", err);
+            std::process::exit(1)
+        }
+    };
 
-    info!("listening on {}, proxying to {}", listen_addr, server_addr);
-    let listener = match TcpListener::bind(listen_addr) {
+    info!(
+        "listening on {}, proxying to {}",
+        resolved_listen_addr, resolved_server_addr
+    );
+    let listener = match SocketListener::bind_reuse(&resolved_listen_addr, None) {
         Ok(l) => l,
         Err(err) => {
             error!("listening failed - {}", err);
@@ -563,22 +603,27 @@ fn main() {
         }
     };
 
-    for incoming in listener.incoming() {
-        let client_conn = incoming.unwrap();
-        let server_addr = server_addr.to_string();
-        let _ = std::thread::spawn(move || {
-            if let Ok(peer) = client_conn.peer_addr() {
-                info!("new connection from {}", peer);
+    loop {
+        match listener.accept() {
+            Ok((client_conn, peer_addr)) => {
+                let server_addr = server_addr.to_string();
+                let _ = std::thread::spawn(move || {
+                    info!("new connection from {}", peer_addr);
+                    if let Err(err) = handle_connection(client_conn, server_addr) {
+                        match err.kind() {
+                            std::io::ErrorKind::UnexpectedEof
+                            | std::io::ErrorKind::BrokenPipe
+                            | std::io::ErrorKind::ConnectionAborted
+                            | std::io::ErrorKind::ConnectionReset => (),
+                            _ => error!("connection terminated with error: {}", err),
+                        }
+                    };
+                });
             }
-            if let Err(err) = handle_connection(client_conn, server_addr) {
-                match err.kind() {
-                    std::io::ErrorKind::UnexpectedEof
-                    | std::io::ErrorKind::BrokenPipe
-                    | std::io::ErrorKind::ConnectionAborted
-                    | std::io::ErrorKind::ConnectionReset => (),
-                    _ => error!("connection terminated with error: {}", err),
-                }
-            };
-        });
+            Err(err) => {
+                error!("unable to accept connection: {}", err);
+                std::process::exit(1)
+            }
+        }
     }
 }

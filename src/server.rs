@@ -1,6 +1,7 @@
 use super::errno;
 use super::fcall;
 use super::fcall::*;
+use super::transport;
 use std::borrow::Cow;
 use std::boxed::Box;
 use std::ops::DerefMut;
@@ -21,7 +22,7 @@ impl<'a> FcallResponse {
     fn _send(&mut self, resp: Fcall<'_>) {
         let mut wstate = self.wstate.lock().unwrap();
         let wstate = wstate.deref_mut();
-        let _ = fcall::write(
+        let _ = transport::write(
             &mut wstate.conn,
             &mut wstate.buf,
             &fcall::TaggedFcall {
@@ -597,7 +598,7 @@ where
     let mut wbuf: Vec<u8> = Vec::with_capacity(bufsize);
 
     // Handle version and size buffer.
-    match fcall::read(&mut conn, &mut rbuf) {
+    match transport::read(&mut conn, &mut rbuf) {
         Ok(fcall::TaggedFcall {
             tag: fcall::NOTAG,
             fcall:
@@ -620,7 +621,7 @@ where
                 }
             };
 
-            if fcall::write(
+            if transport::write(
                 &mut conn,
                 &mut wbuf,
                 &fcall::TaggedFcall {
@@ -653,7 +654,7 @@ where
     }));
 
     loop {
-        let (fcall, resp) = match fcall::read(&mut rconn, &mut rbuf) {
+        let (fcall, resp) = match transport::read(&mut rconn, &mut rbuf) {
             Ok(fcall::TaggedFcall { tag, fcall }) => (
                 fcall,
                 FcallResponse {

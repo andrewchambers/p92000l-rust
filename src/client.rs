@@ -1,10 +1,13 @@
 use super::fcall;
 use super::fcall::{Fcall, TaggedFcall};
+use super::transport;
 use crossbeam_channel as channel;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::net::TcpStream;
 use std::ops::DerefMut;
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -133,7 +136,7 @@ impl InflightFcalls {
 }
 
 struct ClientWriteState {
-    w: TcpStream,
+    w: Box<dyn transport::Transport>,
     buf: Vec<u8>,
 }
 
@@ -150,7 +153,7 @@ struct ClientState {
 impl Drop for ClientState {
     fn drop(&mut self) {
         let write_state = self.write_state.lock().unwrap();
-        let _ = write_state.w.shutdown(std::net::Shutdown::Both);
+        let _ = write_state.w.shutdown();
         drop(write_state);
         if let Some(read_worker_handle) = self.read_worker_handle.take() {
             let _ = read_worker_handle.join();
@@ -165,15 +168,32 @@ pub struct Client {
 
 impl Client {
     pub fn tcp(conn: TcpStream, bufsize: usize) -> Result<Client, std::io::Error> {
-        let mut r = conn;
-        let mut w = r.try_clone()?;
+        let r = conn.try_clone()?;
+        let w = conn;
+        Client::new(r, w, bufsize)
+    }
+
+    #[cfg(unix)]
+    pub fn unix(conn: UnixStream, bufsize: usize) -> Result<Client, std::io::Error> {
+        let r = conn.try_clone()?;
+        let w = conn;
+        Client::new(r, w, bufsize)
+    }
+
+    pub fn new<R: transport::Transport + 'static, W: transport::Transport + 'static>(
+        r: R,
+        w: W,
+        bufsize: usize,
+    ) -> Result<Client, std::io::Error> {
+        let mut r: Box<dyn transport::Transport> = std::boxed::Box::new(r);
+        let mut w: Box<dyn transport::Transport> = std::boxed::Box::new(w);
 
         const MIN_MSIZE: u32 = 4096 + fcall::READDIRHDRSZ;
         let mut bufsize = bufsize.max(MIN_MSIZE as usize).min(u32::MAX as usize);
         let mut wbuf = Vec::with_capacity(bufsize);
         let mut rbuf = Vec::with_capacity(bufsize);
 
-        fcall::write(
+        transport::write(
             &mut w,
             &mut wbuf,
             &TaggedFcall {
@@ -185,7 +205,7 @@ impl Client {
             },
         )?;
 
-        match fcall::read(&mut r, &mut rbuf)? {
+        match transport::read(&mut r, &mut rbuf)? {
             TaggedFcall {
                 tag: fcall::NOTAG,
                 fcall: Fcall::Rversion(fcall::Rversion { msize, version }),
@@ -219,9 +239,13 @@ impl Client {
         })
     }
 
-    fn read_worker(mut r: TcpStream, mut rbuf: Vec<u8>, fcalls: InflightFcalls) {
+    fn read_worker(
+        mut r: Box<dyn transport::Transport>,
+        mut rbuf: Vec<u8>,
+        fcalls: InflightFcalls,
+    ) {
         loop {
-            match fcall::read(&mut r, &mut rbuf) {
+            match transport::read(&mut r, &mut rbuf) {
                 Ok(response) => {
                     if let Some(resp) = fcalls.remove(response.tag) {
                         resp.send(response.fcall.clone_static()).unwrap();
@@ -254,7 +278,7 @@ impl Client {
         let buf = &mut write_state.buf;
         // Will block until a tag is free.
         let tag = self.state.fcalls.add(tx)?;
-        fcall::write(w, buf, &TaggedFcall { tag, fcall })?;
+        transport::write(w, buf, &TaggedFcall { tag, fcall })?;
         drop(write_state_guard);
         rx.recv().or_else(err_io_result)
     }
@@ -438,7 +462,7 @@ impl Fid {
         }
     }
 
-    // XXX make flags an bigflag set?
+    // XXX make flags atg a bitflag set?
     pub fn unlinkat(&self, name: &str, flags: u32) -> Result<(), std::io::Error> {
         match self.client.fcall(Fcall::Tunlinkat(fcall::Tunlinkat {
             dfid: self.id,

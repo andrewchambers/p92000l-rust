@@ -2,7 +2,7 @@ use bitflags::bitflags;
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::os::unix::fs::MetadataExt;
 
 /// Special tag which `Tversion`/`Rversion` must use as `tag`
@@ -1688,129 +1688,6 @@ impl<'a> TaggedFcall<'a> {
         let mut d = FcallDecoder { buf };
         d.decode_u32()?; // Skip size.
         d.decode()
-    }
-}
-
-pub fn read_to_buf<R: Read>(r: &mut R, buf: &mut Vec<u8>) -> std::io::Result<()> {
-    buf.resize(4, 0);
-    r.read_exact(&mut buf[..])?;
-    let sz = u32::from_le_bytes(buf[..4].try_into().unwrap()) as usize;
-    if sz > buf.capacity() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "9p remote violated protocol size limit",
-        ));
-    }
-    buf.resize(sz, 0);
-    r.read_exact(&mut buf[4..])?;
-    Ok(())
-}
-
-// Returns std::io::ErrorKind::TimedOut on timeout.
-pub fn read_to_buf_timeout(
-    conn: &mut std::net::TcpStream,
-    fcall_buf: &mut Vec<u8>,
-    timeout: std::time::Duration,
-) -> Result<(), std::io::Error> {
-    let old_timeout = conn.read_timeout()?;
-    conn.set_read_timeout(Some(timeout))?;
-
-    fcall_buf.resize(4, 0);
-    let read_result = conn.read(&mut fcall_buf[..4]);
-
-    conn.set_read_timeout(old_timeout)?;
-
-    match read_result {
-        Ok(n) => {
-            if n < 4 {
-                conn.read_exact(&mut fcall_buf[n..4])?;
-            }
-        }
-        Err(err) => match err.kind() {
-            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => {
-                return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
-            }
-            _ => return Err(err),
-        },
-    };
-
-    let sz = u32::from_le_bytes(fcall_buf[..4].try_into().unwrap()) as usize;
-    if sz > fcall_buf.capacity() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "9p remote violated protocol size limit",
-        ));
-    }
-
-    fcall_buf.resize(sz, 0);
-    conn.read_exact(&mut fcall_buf[4..sz])?;
-
-    Ok(())
-}
-
-pub fn read<'a, R: Read>(
-    r: &mut R,
-    buf: &'a mut Vec<u8>,
-) -> Result<TaggedFcall<'a>, std::io::Error> {
-    read_to_buf(r, buf)?;
-    TaggedFcall::decode(&buf[..])
-}
-
-pub fn write<W: Write>(w: &mut W, buf: &mut Vec<u8>, fcall: &TaggedFcall) -> std::io::Result<()> {
-    buf.truncate(0);
-    match fcall {
-        TaggedFcall {
-            tag,
-            fcall: Fcall::Rread(Rread { data }),
-        } => {
-            // Zero copy Rread path.
-            let sz = 4 + 1 + 2 + 4 + data.len();
-            if sz > buf.capacity() {
-                // The message was larger than the buffer.
-                // This must be larger than msize so flag the mistake.
-                return Err(invalid_9p_msg());
-            }
-            let mut cursor = std::io::Cursor::new(buf);
-            encode_u32(&mut cursor, sz as u32)?;
-            encode_u8(&mut cursor, 117)?;
-            encode_u16(&mut cursor, *tag)?;
-            encode_u32(&mut cursor, data.len() as u32)?;
-            let buf = cursor.into_inner();
-            // XXX: Could be a vectored write all if it were stable.
-            w.write_all(&buf[..])?;
-            w.write_all(&data[..])?;
-            Ok(())
-        }
-        TaggedFcall {
-            tag,
-            fcall: Fcall::Twrite(Twrite { fid, offset, data }),
-        } => {
-            // Zero copy Twrite path.
-            let sz = 4 + 1 + 2 + 4 + 8 + 4 + data.len();
-            if sz > buf.capacity() {
-                // The message was larger than the buffer.
-                // This must be larger than msize so flag the mistake.
-                return Err(invalid_9p_msg());
-            }
-            let mut cursor = std::io::Cursor::new(buf);
-            encode_u32(&mut cursor, sz as u32)?;
-            encode_u8(&mut cursor, 118)?;
-            encode_u16(&mut cursor, *tag)?;
-            encode_u32(&mut cursor, *fid)?;
-            encode_u64(&mut cursor, *offset)?;
-            encode_u32(&mut cursor, data.len() as u32)?;
-            let buf = cursor.into_inner();
-            // XXX: Could be a vectored write here?
-            w.write_all(&buf[..])?;
-            w.write_all(&data[..])?;
-            Ok(())
-        }
-        fcall => {
-            // Slow path, encode the whole message to the buffer then write it.
-            fcall.encode_to_buf(buf)?;
-            w.write_all(&buf[..])?;
-            Ok(())
-        }
     }
 }
 
