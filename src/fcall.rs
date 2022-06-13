@@ -1776,7 +1776,7 @@ pub fn write<W: Write>(w: &mut W, buf: &mut Vec<u8>, fcall: &TaggedFcall) -> std
             encode_u16(&mut cursor, *tag)?;
             encode_u32(&mut cursor, data.len() as u32)?;
             let buf = cursor.into_inner();
-            // XXX: Could be a vectored write here?
+            // XXX: Could be a vectored write all if it were stable.
             w.write_all(&buf[..])?;
             w.write_all(&data[..])?;
             Ok(())

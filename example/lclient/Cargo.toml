@@ -10,5 +10,5 @@ name = "lclient"
 [dependencies]
 nix = "*"
 
-[dependencies.p92000]
+[dependencies.p92000l]
 path = "../../"

@@ -1,7 +1,6 @@
 use log::{debug, error, info};
-use p92000l::errno;
-use p92000l::fcall;
-use p92000l::fcall::{Fcall, FcallType};
+use p92000l;
+use p92000l::{Fcall, FcallType};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
@@ -15,13 +14,13 @@ struct ProxyState {
     server_addr: String,
     client_conn: TcpStream,
     server_conn: TcpStream,
-    rversion: fcall::Rversion<'static>,
+    rversion: p92000l::Rversion<'static>,
     server_state: Arc<Mutex<ShadowServerState>>,
 }
 
 #[derive(Debug)]
 enum AttachChange {
-    AddOnSuccess((u32, fcall::Tattach<'static>)),
+    AddOnSuccess((u32, p92000l::Tattach<'static>)),
     Remove(u32),
     None,
 }
@@ -29,7 +28,7 @@ enum AttachChange {
 #[derive(Debug)]
 struct ShadowServerState {
     // mapping of fids to Tattach so we can restablish them on reconnect.
-    attach_fids: HashMap<u32, fcall::Tattach<'static>>,
+    attach_fids: HashMap<u32, p92000l::Tattach<'static>>,
     inflight_tags: HashMap<u16, AttachChange>,
 }
 
@@ -49,7 +48,7 @@ impl ShadowServerState {
         // For speed, we often don't even both decoding the full buffer.
         match fcall_type {
             FcallType::Tattach | FcallType::Tclunk | FcallType::Tremove => {
-                if let Ok(tagged_fcall) = fcall::TaggedFcall::decode(buf) {
+                if let Ok(tagged_fcall) = p92000l::TaggedFcall::decode(buf) {
                     match &tagged_fcall.fcall {
                         Fcall::Tattach(tattach) => {
                             self.inflight_tags.insert(
@@ -59,12 +58,12 @@ impl ShadowServerState {
                                 ),
                             );
                         }
-                        Fcall::Tclunk(fcall::Tclunk { fid }) => {
+                        Fcall::Tclunk(p92000l::Tclunk { fid }) => {
                             self
                             .inflight_tags
                             .insert(tagged_fcall.tag, AttachChange::Remove(*fid));
                         }
-                        Fcall::Tremove(fcall::Tremove { fid }) => {
+                        Fcall::Tremove(p92000l::Tremove { fid }) => {
                             self
                             .inflight_tags
                             .insert(tagged_fcall.tag, AttachChange::Remove(*fid));
@@ -165,9 +164,9 @@ fn initial_connect(
 ) -> Result<ProxyState, std::io::Error> {
     let mut fcall_buf = Vec::with_capacity(8192);
 
-    let tversion = match fcall::read(&mut client_conn, &mut fcall_buf)? {
-        fcall::TaggedFcall {
-            tag: fcall::NOTAG,
+    let tversion = match p92000l::read(&mut client_conn, &mut fcall_buf)? {
+        p92000l::TaggedFcall {
+            tag: p92000l::NOTAG,
             fcall: Fcall::Tversion(tversion),
         } => tversion.clone_static(),
         _ => {
@@ -179,12 +178,12 @@ fn initial_connect(
     };
 
     if tversion.version != "9P2000.L" {
-        fcall::write(
+        p92000l::write(
             &mut client_conn,
             &mut fcall_buf,
-            &fcall::TaggedFcall {
-                tag: fcall::NOTAG,
-                fcall: Fcall::Rversion(fcall::Rversion {
+            &p92000l::TaggedFcall {
+                tag: p92000l::NOTAG,
+                fcall: Fcall::Rversion(p92000l::Rversion {
                     msize: tversion.msize,
                     version: Cow::from("unknown"),
                 }),
@@ -219,11 +218,11 @@ fn initial_connect(
             }
         };
 
-        if let Err(err) = fcall::write(
+        if let Err(err) = p92000l::write(
             &mut server_conn,
             &mut fcall_buf,
-            &fcall::TaggedFcall {
-                tag: fcall::NOTAG,
+            &p92000l::TaggedFcall {
+                tag: p92000l::NOTAG,
                 fcall: Fcall::Tversion(tversion.clone_static()),
             },
         ) {
@@ -231,9 +230,9 @@ fn initial_connect(
             continue;
         }
 
-        let rversion = match fcall::read(&mut server_conn, &mut fcall_buf)? {
-            fcall::TaggedFcall {
-                tag: fcall::NOTAG,
+        let rversion = match p92000l::read(&mut server_conn, &mut fcall_buf)? {
+            p92000l::TaggedFcall {
+                tag: p92000l::NOTAG,
                 fcall: Fcall::Rversion(rversion),
             } => rversion.clone_static(),
             _ => {
@@ -246,11 +245,11 @@ fn initial_connect(
 
         fcall_buf.resize(rversion.msize as usize, 0);
 
-        fcall::write(
+        p92000l::write(
             &mut client_conn,
             &mut fcall_buf,
-            &fcall::TaggedFcall {
-                tag: fcall::NOTAG,
+            &p92000l::TaggedFcall {
+                tag: p92000l::NOTAG,
                 fcall: Fcall::Rversion(rversion.clone()),
             },
         )?;
@@ -276,7 +275,7 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
         };
 
     let io_worker = std::thread::spawn(move || loop {
-        match fcall::read_to_buf(&mut worker_server_conn, &mut fcall_buf) {
+        match p92000l::read_to_buf(&mut worker_server_conn, &mut fcall_buf) {
             Ok(_) => (),
             Err(err) => {
                 debug!("error reading from server: {}", err);
@@ -304,7 +303,7 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
     let mut fcall_buf = Vec::with_capacity(state.rversion.msize as usize);
 
     loop {
-        match fcall::read_to_buf(&mut state.client_conn, &mut fcall_buf) {
+        match p92000l::read_to_buf(&mut state.client_conn, &mut fcall_buf) {
             Ok(_) => (),
             Err(err) => {
                 debug!("error reading from client: {}", err);
@@ -347,16 +346,18 @@ fn client_eio_until(
         }
 
         // Sleep until deadline, handling any incoming packets.
-        match fcall::read_to_buf_timeout(client_conn, fcall_buf, deadline - now) {
+        match p92000l::read_to_buf_timeout(client_conn, fcall_buf, deadline - now) {
             Ok(_) => (),
             Err(err) if err.kind() == std::io::ErrorKind::TimedOut => continue,
             Err(err) => return Err(err),
         };
 
         server_state.on_fcall(fcall_buf);
-        let resp = fcall::TaggedFcall {
+        let resp = p92000l::TaggedFcall {
             tag: u16::from_le_bytes(fcall_buf[5..7].try_into().unwrap()),
-            fcall: Fcall::Rlerror(fcall::Rlerror { ecode: errno::EIO }),
+            fcall: Fcall::Rlerror(p92000l::Rlerror {
+                ecode: p92000l::EIO,
+            }),
         };
         resp.encode_to_buf(fcall_buf)?;
         server_state.on_fcall(fcall_buf); // Ensure failed clunks are respected.
@@ -374,12 +375,14 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
     // Answer remaining in flight calls expecting a response with an error.
     for (tag, _) in server_state.inflight_tags.drain() {
         debug!("cancelling inflight tag {} with EIO", tag);
-        fcall::write(
+        p92000l::write(
             &mut state.client_conn,
             &mut fcall_buf,
-            &fcall::TaggedFcall {
+            &p92000l::TaggedFcall {
                 tag,
-                fcall: Fcall::Rlerror(fcall::Rlerror { ecode: errno::EIO }),
+                fcall: Fcall::Rlerror(p92000l::Rlerror {
+                    ecode: p92000l::EIO,
+                }),
             },
         )?;
     }
@@ -409,12 +412,12 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
         };
 
         // Resend the version, use the rversion we initially got.
-        if let Err(err) = fcall::write(
+        if let Err(err) = p92000l::write(
             &mut state.server_conn,
             &mut fcall_buf,
-            &fcall::TaggedFcall {
-                tag: fcall::NOTAG,
-                fcall: Fcall::Tversion(fcall::Tversion {
+            &p92000l::TaggedFcall {
+                tag: p92000l::NOTAG,
+                fcall: Fcall::Tversion(p92000l::Tversion {
                     msize: state.rversion.msize,
                     version: state.rversion.version.clone(),
                 }),
@@ -424,9 +427,9 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
             continue;
         }
 
-        let rversion = match fcall::read(&mut state.server_conn, &mut fcall_buf)? {
-            fcall::TaggedFcall {
-                tag: fcall::NOTAG,
+        let rversion = match p92000l::read(&mut state.server_conn, &mut fcall_buf)? {
+            p92000l::TaggedFcall {
+                tag: p92000l::NOTAG,
                 fcall: Fcall::Rversion(rversion),
             } => rversion.clone_static(),
             _ => {
@@ -452,12 +455,12 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
                 state.server_addr, &tattach.aname
             );
 
-            if let Err(err) = fcall::write(
+            if let Err(err) = p92000l::write(
                 &mut state.server_conn,
                 &mut fcall_buf,
-                &fcall::TaggedFcall {
-                    tag: fcall::NOTAG,
-                    fcall: Fcall::Tattach(fcall::Tattach {
+                &p92000l::TaggedFcall {
+                    tag: p92000l::NOTAG,
+                    fcall: Fcall::Tattach(p92000l::Tattach {
                         fid: *fid,
                         ..tattach.clone()
                     }),
@@ -467,9 +470,9 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
                 continue;
             }
 
-            match fcall::read(&mut state.server_conn, &mut fcall_buf)? {
-                fcall::TaggedFcall {
-                    tag: fcall::NOTAG,
+            match p92000l::read(&mut state.server_conn, &mut fcall_buf)? {
+                p92000l::TaggedFcall {
+                    tag: p92000l::NOTAG,
                     fcall: Fcall::Rattach(_),
                 } => (),
                 _ => {

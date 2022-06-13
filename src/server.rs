@@ -12,12 +12,12 @@ struct WriteState {
 }
 
 #[derive(Clone)]
-pub struct Response {
+pub struct FcallResponse {
     pub tag: u16,
     wstate: Arc<Mutex<WriteState>>,
 }
 
-impl<'a> Response {
+impl<'a> FcallResponse {
     fn _send(&mut self, resp: Fcall<'_>) {
         let mut wstate = self.wstate.lock().unwrap();
         let wstate = wstate.deref_mut();
@@ -37,7 +37,7 @@ impl<'a> Response {
     }
 }
 
-impl Drop for Response {
+impl Drop for FcallResponse {
     fn drop(&mut self) {
         if self.tag != fcall::NOTAG {
             self._send(Rlerror { ecode: errno::EIO }.into())
@@ -46,163 +46,163 @@ impl Drop for Response {
 }
 
 pub trait Filesystem {
-    fn statfs(&mut self, _req: &Tstatfs, resp: Response) {
+    fn statfs(&mut self, _req: &Tstatfs, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn lopen(&mut self, _req: &Tlopen, resp: Response) {
+    fn lopen(&mut self, _req: &Tlopen, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn lcreate(&mut self, _req: &Tlcreate, resp: Response) {
+    fn lcreate(&mut self, _req: &Tlcreate, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn symlink(&mut self, _req: &Tsymlink, resp: Response) {
+    fn symlink(&mut self, _req: &Tsymlink, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn mknod(&mut self, _req: &Tmknod, resp: Response) {
+    fn mknod(&mut self, _req: &Tmknod, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn rename(&mut self, _req: &Trename, resp: Response) {
+    fn rename(&mut self, _req: &Trename, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn readlink(&mut self, _req: &Treadlink, resp: Response) {
+    fn readlink(&mut self, _req: &Treadlink, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn getattr(&mut self, _req: &Tgetattr, resp: Response) {
+    fn getattr(&mut self, _req: &Tgetattr, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn setattr(&mut self, _req: &Tsetattr, resp: Response) {
+    fn setattr(&mut self, _req: &Tsetattr, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn xattrwalk(&mut self, _req: &Txattrwalk, resp: Response) {
+    fn xattrwalk(&mut self, _req: &Txattrwalk, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn xattrcreate(&mut self, _req: &Txattrcreate, resp: Response) {
+    fn xattrcreate(&mut self, _req: &Txattrcreate, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn readdir(&mut self, _req: &Treaddir, resp: Response) {
+    fn readdir(&mut self, _req: &Treaddir, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn fsync(&mut self, _req: &Tfsync, resp: Response) {
+    fn fsync(&mut self, _req: &Tfsync, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn lock(&mut self, _req: &Tlock, resp: Response) {
+    fn lock(&mut self, _req: &Tlock, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn getlock(&mut self, _req: &Tgetlock, resp: Response) {
+    fn getlock(&mut self, _req: &Tgetlock, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn link(&mut self, _req: &Tlink, resp: Response) {
+    fn link(&mut self, _req: &Tlink, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn mkdir(&mut self, _req: &Tmkdir, resp: Response) {
+    fn mkdir(&mut self, _req: &Tmkdir, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn renameat(&mut self, _req: &Trenameat, resp: Response) {
+    fn renameat(&mut self, _req: &Trenameat, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn unlinkat(&mut self, _req: &Tunlinkat, resp: Response) {
+    fn unlinkat(&mut self, _req: &Tunlinkat, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn auth(&mut self, _req: &Tauth, resp: Response) {
+    fn auth(&mut self, _req: &Tauth, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn attach(&mut self, _req: &Tattach, resp: Response) {
+    fn attach(&mut self, _req: &Tattach, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn flush(&mut self, _req: &Tflush, resp: Response) {
+    fn flush(&mut self, _req: &Tflush, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn walk(&mut self, _req: &Twalk, resp: Response) {
+    fn walk(&mut self, _req: &Twalk, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn read(&mut self, _req: &Tread, resp: Response) {
+    fn read(&mut self, _req: &Tread, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn write(&mut self, _req: &Twrite, resp: Response) {
+    fn write(&mut self, _req: &Twrite, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn clunk(&mut self, _req: &Tclunk, resp: Response) {
+    fn clunk(&mut self, _req: &Tclunk, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn remove(&mut self, _req: &Tremove, resp: Response) {
+    fn remove(&mut self, _req: &Tremove, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
@@ -210,163 +210,163 @@ pub trait Filesystem {
 }
 
 pub trait ThreadedFilesystem {
-    fn statfs(&self, _req: &Tstatfs, resp: Response) {
+    fn statfs(&self, _req: &Tstatfs, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn lopen(&self, _req: &Tlopen, resp: Response) {
+    fn lopen(&self, _req: &Tlopen, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn lcreate(&self, _req: &Tlcreate, resp: Response) {
+    fn lcreate(&self, _req: &Tlcreate, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn symlink(&self, _req: &Tsymlink, resp: Response) {
+    fn symlink(&self, _req: &Tsymlink, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn mknod(&self, _req: &Tmknod, resp: Response) {
+    fn mknod(&self, _req: &Tmknod, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn rename(&self, _req: &Trename, resp: Response) {
+    fn rename(&self, _req: &Trename, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn readlink(&self, _req: &Treadlink, resp: Response) {
+    fn readlink(&self, _req: &Treadlink, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn getattr(&self, _req: &Tgetattr, resp: Response) {
+    fn getattr(&self, _req: &Tgetattr, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn setattr(&self, _req: &Tsetattr, resp: Response) {
+    fn setattr(&self, _req: &Tsetattr, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn xattrwalk(&self, _req: &Txattrwalk, resp: Response) {
+    fn xattrwalk(&self, _req: &Txattrwalk, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn xattrcreate(&self, _req: &Txattrcreate, resp: Response) {
+    fn xattrcreate(&self, _req: &Txattrcreate, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn readdir(&self, _req: &Treaddir, resp: Response) {
+    fn readdir(&self, _req: &Treaddir, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn fsync(&self, _req: &Tfsync, resp: Response) {
+    fn fsync(&self, _req: &Tfsync, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn lock(&self, _req: &Tlock, resp: Response) {
+    fn lock(&self, _req: &Tlock, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn getlock(&self, _req: &Tgetlock, resp: Response) {
+    fn getlock(&self, _req: &Tgetlock, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn link(&self, _req: &Tlink, resp: Response) {
+    fn link(&self, _req: &Tlink, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn mkdir(&self, _req: &Tmkdir, resp: Response) {
+    fn mkdir(&self, _req: &Tmkdir, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn renameat(&self, _req: &Trenameat, resp: Response) {
+    fn renameat(&self, _req: &Trenameat, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn unlinkat(&self, _req: &Tunlinkat, resp: Response) {
+    fn unlinkat(&self, _req: &Tunlinkat, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn auth(&self, _req: &Tauth, resp: Response) {
+    fn auth(&self, _req: &Tauth, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn attach(&self, _req: &Tattach, resp: Response) {
+    fn attach(&self, _req: &Tattach, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn flush(&self, _req: &Tflush, resp: Response) {
+    fn flush(&self, _req: &Tflush, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn walk(&self, _req: &Twalk, resp: Response) {
+    fn walk(&self, _req: &Twalk, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn read(&self, _req: &Tread, resp: Response) {
+    fn read(&self, _req: &Tread, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn write(&self, _req: &Twrite, resp: Response) {
+    fn write(&self, _req: &Twrite, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn clunk(&self, _req: &Tclunk, resp: Response) {
+    fn clunk(&self, _req: &Tclunk, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
     }
 
-    fn remove(&self, _req: &Tremove, resp: Response) {
+    fn remove(&self, _req: &Tremove, resp: FcallResponse) {
         resp.send(Rlerror {
             ecode: errno::EOPNOTSUPP,
         })
@@ -422,163 +422,163 @@ impl<Fs: 'static + ThreadedFilesystem + Send + Sync> Drop for ThreadPoolServer<F
 }
 
 impl<Fs: 'static + ThreadedFilesystem + Send + Sync> Filesystem for ThreadPoolServer<Fs> {
-    fn statfs(&mut self, req: &Tstatfs, resp: Response) {
+    fn statfs(&mut self, req: &Tstatfs, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.statfs(&req, resp)));
     }
 
-    fn lopen(&mut self, req: &Tlopen, resp: Response) {
+    fn lopen(&mut self, req: &Tlopen, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.lopen(&req, resp)));
     }
 
-    fn lcreate(&mut self, req: &Tlcreate, resp: Response) {
+    fn lcreate(&mut self, req: &Tlcreate, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.lcreate(&req, resp)));
     }
 
-    fn symlink(&mut self, req: &Tsymlink, resp: Response) {
+    fn symlink(&mut self, req: &Tsymlink, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.symlink(&req, resp)));
     }
 
-    fn mknod(&mut self, req: &Tmknod, resp: Response) {
+    fn mknod(&mut self, req: &Tmknod, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.mknod(&req, resp)));
     }
 
-    fn rename(&mut self, req: &Trename, resp: Response) {
+    fn rename(&mut self, req: &Trename, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.rename(&req, resp)));
     }
 
-    fn readlink(&mut self, req: &Treadlink, resp: Response) {
+    fn readlink(&mut self, req: &Treadlink, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.readlink(&req, resp)));
     }
 
-    fn getattr(&mut self, req: &Tgetattr, resp: Response) {
+    fn getattr(&mut self, req: &Tgetattr, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.getattr(&req, resp)));
     }
 
-    fn setattr(&mut self, req: &Tsetattr, resp: Response) {
+    fn setattr(&mut self, req: &Tsetattr, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.setattr(&req, resp)));
     }
 
-    fn xattrwalk(&mut self, req: &Txattrwalk, resp: Response) {
+    fn xattrwalk(&mut self, req: &Txattrwalk, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.xattrwalk(&req, resp)));
     }
 
-    fn xattrcreate(&mut self, req: &Txattrcreate, resp: Response) {
+    fn xattrcreate(&mut self, req: &Txattrcreate, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.xattrcreate(&req, resp)));
     }
 
-    fn readdir(&mut self, req: &Treaddir, resp: Response) {
+    fn readdir(&mut self, req: &Treaddir, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.readdir(&req, resp)));
     }
 
-    fn fsync(&mut self, req: &Tfsync, resp: Response) {
+    fn fsync(&mut self, req: &Tfsync, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.fsync(&req, resp)));
     }
 
-    fn lock(&mut self, req: &Tlock, resp: Response) {
+    fn lock(&mut self, req: &Tlock, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.lock(&req, resp)));
     }
 
-    fn getlock(&mut self, req: &Tgetlock, resp: Response) {
+    fn getlock(&mut self, req: &Tgetlock, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.getlock(&req, resp)));
     }
 
-    fn link(&mut self, req: &Tlink, resp: Response) {
+    fn link(&mut self, req: &Tlink, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.link(&req, resp)));
     }
 
-    fn mkdir(&mut self, req: &Tmkdir, resp: Response) {
+    fn mkdir(&mut self, req: &Tmkdir, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.mkdir(&req, resp)));
     }
 
-    fn renameat(&mut self, req: &Trenameat, resp: Response) {
+    fn renameat(&mut self, req: &Trenameat, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.renameat(&req, resp)));
     }
 
-    fn unlinkat(&mut self, req: &Tunlinkat, resp: Response) {
+    fn unlinkat(&mut self, req: &Tunlinkat, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.unlinkat(&req, resp)));
     }
 
-    fn auth(&mut self, req: &Tauth, resp: Response) {
+    fn auth(&mut self, req: &Tauth, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.auth(&req, resp)));
     }
 
-    fn attach(&mut self, req: &Tattach, resp: Response) {
+    fn attach(&mut self, req: &Tattach, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.attach(&req, resp)));
     }
 
-    fn flush(&mut self, req: &Tflush, resp: Response) {
+    fn flush(&mut self, req: &Tflush, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.flush(&req, resp)));
     }
 
-    fn walk(&mut self, req: &Twalk, resp: Response) {
+    fn walk(&mut self, req: &Twalk, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.walk(&req, resp)));
     }
 
-    fn read(&mut self, req: &Tread, resp: Response) {
+    fn read(&mut self, req: &Tread, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.read(&req, resp)));
     }
 
-    fn write(&mut self, req: &Twrite, resp: Response) {
+    fn write(&mut self, req: &Twrite, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone_static();
         self.dispatch(Box::new(move || fs.write(&req, resp)));
     }
 
-    fn clunk(&mut self, req: &Tclunk, resp: Response) {
+    fn clunk(&mut self, req: &Tclunk, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.clunk(&req, resp)));
     }
 
-    fn remove(&mut self, req: &Tremove, resp: Response) {
+    fn remove(&mut self, req: &Tremove, resp: FcallResponse) {
         let fs = self.fs.clone();
         let req = req.clone();
         self.dispatch(Box::new(move || fs.remove(&req, resp)));
@@ -656,7 +656,7 @@ where
         let (fcall, resp) = match fcall::read(&mut rconn, &mut rbuf) {
             Ok(fcall::TaggedFcall { tag, fcall }) => (
                 fcall,
-                Response {
+                FcallResponse {
                     tag,
                     wstate: wstate.clone(),
                 },
