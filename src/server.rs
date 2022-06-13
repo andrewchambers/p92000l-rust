@@ -1,6 +1,6 @@
+use super::errno;
 use super::fcall;
 use super::fcall::*;
-use super::errno;
 use std::borrow::Cow;
 use std::boxed::Box;
 use std::ops::DerefMut;
@@ -608,7 +608,7 @@ where
         }) => {
             let msize = (*msize).min(bufsize as u32);
 
-            let rversion = if version == P92000L {
+            let rversion = if version == "9P2000.L" {
                 Rversion {
                     version: version.clone(),
                     msize,

@@ -180,7 +180,7 @@ impl Client {
                 tag: fcall::NOTAG,
                 fcall: Fcall::Tversion(fcall::Tversion {
                     msize: bufsize.min(u32::MAX as usize) as u32,
-                    version: Cow::from(fcall::P92000L),
+                    version: Cow::from("9P2000.L"),
                 }),
             },
         )?;
@@ -190,7 +190,7 @@ impl Client {
                 tag: fcall::NOTAG,
                 fcall: Fcall::Rversion(fcall::Rversion { msize, version }),
             } => {
-                if version != fcall::P92000L {
+                if version != "9P2000.L" {
                     return Err(err_other("protocol negotiation failed"));
                 }
                 bufsize = bufsize.min(msize as usize);

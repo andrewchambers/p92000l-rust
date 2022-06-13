@@ -5,12 +5,6 @@ use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::fs::MetadataExt;
 
-/// 9P2000 version string
-pub const P92000: &str = "9P2000";
-
-/// 9P2000.L version string
-pub const P92000L: &str = "9P2000.L";
-
 /// Special tag which `Tversion`/`Rversion` must use as `tag`
 pub const NOTAG: u16 = !0;
 

@@ -1,7 +1,8 @@
 use log::{debug, error, info};
+use p92000l::errno;
 use p92000l::fcall;
 use p92000l::fcall::{Fcall, FcallType};
-use p92000l::errno;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
 use std::net::{TcpListener, TcpStream};
@@ -176,6 +177,28 @@ fn initial_connect(
             ))
         }
     };
+
+    if tversion.version != "9P2000.L" {
+        fcall::write(
+            &mut client_conn,
+            &mut fcall_buf,
+            &fcall::TaggedFcall {
+                tag: fcall::NOTAG,
+                fcall: Fcall::Rversion(fcall::Rversion {
+                    msize: tversion.msize,
+                    version: Cow::from("unknown"),
+                }),
+            },
+        )?;
+        error!(
+            "rejecting connection due to version mismatch, got version {} from {}",
+            tversion.version, &server_addr
+        );
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "9p protocol error, expected version 9P2000.L",
+        ));
+    }
 
     info!("establishing initial connection to {}", &server_addr);
 
