@@ -18,7 +18,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-use super::transport::Transport;
+use super::transport::{ReadTransport, WriteTransport};
 use std::fmt;
 use std::io;
 use std::net;
@@ -231,7 +231,7 @@ impl io::Write for Socket {
     }
 }
 
-impl Transport for Socket {
+impl ReadTransport for Socket {
     fn set_read_timeout(&mut self, t: Option<Duration>) -> io::Result<()> {
         match self {
             Socket::Inet(s) => s.set_read_timeout(t),
@@ -247,7 +247,9 @@ impl Transport for Socket {
             Socket::Unix(s) => s.read_timeout(),
         }
     }
+}
 
+impl WriteTransport for Socket {
     fn shutdown(&self) -> io::Result<()> {
         match self {
             Socket::Inet(s) => s.shutdown(std::net::Shutdown::Both),

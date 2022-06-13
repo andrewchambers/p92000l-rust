@@ -1,6 +1,8 @@
 use log::{debug, error, info};
 use p92000l;
-use p92000l::{Fcall, FcallType, Socket, SocketAddr, SocketListener, Transport};
+use p92000l::{
+    Fcall, FcallType, ReadTransport, Socket, SocketAddr, SocketListener, WriteTransport,
+};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
@@ -284,43 +286,41 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
             _ => return Ok(()), // Reconnect and retry.
         };
 
-    let io_worker = std::thread::spawn(move || loop {
-        match p92000l::read_to_buf(&mut worker_server_conn, &mut fcall_buf) {
-            Ok(_) => (),
-            Err(err) => {
-                debug!("error reading from server: {}", err);
-                let _ = worker_server_conn.shutdown();
-                break;
-            }
-        };
+    let io_worker = std::thread::spawn(move || {
+        loop {
+            match p92000l::read_to_buf(&mut worker_server_conn, &mut fcall_buf) {
+                Ok(_) => (),
+                Err(err) => {
+                    debug!("error reading from server: {}", err);
+                    break;
+                }
+            };
 
-        {
-            let mut server_state = worker_server_state.lock().unwrap();
-            server_state.on_fcall(&fcall_buf);
+            {
+                let mut server_state = worker_server_state.lock().unwrap();
+                server_state.on_fcall(&fcall_buf);
+            }
+
+            match worker_client_conn.write_all(&fcall_buf) {
+                Ok(_) => (),
+                Err(err) => {
+                    debug!("error writing to client: {}", err);
+                    break;
+                }
+            }
         }
 
-        match worker_client_conn.write_all(&fcall_buf) {
-            Ok(_) => (),
-            Err(err) => {
-                debug!("error writing to client: {}", err);
-                let _ = worker_server_conn.shutdown();
-                let _ = worker_client_conn.shutdown();
-                break;
-            }
-        }
+        let _ = worker_client_conn.shutdown();
     });
 
     let mut fcall_buf = Vec::with_capacity(state.rversion.msize as usize);
 
-    loop {
+    let proxy_result = loop {
         match p92000l::read_to_buf(&mut state.client_conn, &mut fcall_buf) {
             Ok(_) => (),
             Err(err) => {
                 debug!("error reading from client: {}", err);
-                let _ = state.server_conn.shutdown();
-                let _ = state.client_conn.shutdown();
-                io_worker.join().unwrap();
-                return Err(err);
+                break Err(err);
             }
         };
 
@@ -333,12 +333,15 @@ fn proxy_connection(state: &mut ProxyState) -> Result<(), std::io::Error> {
             Ok(_) => (),
             Err(err) => {
                 debug!("error writing to server: {}", err);
-                let _ = state.server_conn.shutdown();
-                io_worker.join().unwrap();
-                return Ok(());
+                break Ok(());
             }
         }
-    }
+    };
+
+    let _ = state.server_conn.shutdown();
+    let _ = io_worker.join();
+
+    proxy_result
 }
 
 fn client_eio_until(

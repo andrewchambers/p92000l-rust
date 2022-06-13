@@ -5,15 +5,17 @@ use std::net::TcpStream;
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-pub trait Transport: Read + Write + Send + Sync {
+pub trait ReadTransport: Read + Send + Sync {
     fn set_read_timeout(&mut self, dur: Option<Duration>) -> Result<(), std::io::Error>;
 
     fn read_timeout(&self) -> Result<Option<Duration>, std::io::Error>;
+}
 
+pub trait WriteTransport: Write + Send + Sync {
     fn shutdown(&self) -> Result<(), std::io::Error>;
 }
 
-impl Transport for TcpStream {
+impl ReadTransport for TcpStream {
     fn set_read_timeout(&mut self, d: Option<Duration>) -> Result<(), std::io::Error> {
         TcpStream::set_read_timeout(self, d)
     }
@@ -21,14 +23,16 @@ impl Transport for TcpStream {
     fn read_timeout(&self) -> Result<Option<Duration>, std::io::Error> {
         TcpStream::read_timeout(self)
     }
+}
 
+impl WriteTransport for TcpStream {
     fn shutdown(&self) -> Result<(), std::io::Error> {
         TcpStream::shutdown(self, std::net::Shutdown::Both)
     }
 }
 
 #[cfg(unix)]
-impl Transport for UnixStream {
+impl ReadTransport for UnixStream {
     fn set_read_timeout(&mut self, d: Option<Duration>) -> Result<(), std::io::Error> {
         UnixStream::set_read_timeout(self, d)
     }
@@ -36,7 +40,10 @@ impl Transport for UnixStream {
     fn read_timeout(&self) -> Result<Option<Duration>, std::io::Error> {
         UnixStream::read_timeout(self)
     }
+}
 
+#[cfg(unix)]
+impl WriteTransport for UnixStream {
     fn shutdown(&self) -> Result<(), std::io::Error> {
         UnixStream::shutdown(self, std::net::Shutdown::Both)
     }
@@ -58,7 +65,7 @@ pub fn read_to_buf<R: Read>(r: &mut R, buf: &mut Vec<u8>) -> std::io::Result<()>
 }
 
 // Returns std::io::ErrorKind::TimedOut on timeout.
-pub fn read_to_buf_timeout<T: Transport>(
+pub fn read_to_buf_timeout<T: ReadTransport>(
     conn: &mut T,
     fcall_buf: &mut Vec<u8>,
     timeout: Duration,

@@ -1,6 +1,7 @@
 use super::fcall;
 use super::fcall::{Fcall, TaggedFcall};
 use super::transport;
+use super::transport::{ReadTransport, WriteTransport};
 use crossbeam_channel as channel;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -136,7 +137,7 @@ impl InflightFcalls {
 }
 
 struct ClientWriteState {
-    w: Box<dyn transport::Transport>,
+    w: Box<dyn WriteTransport>,
     buf: Vec<u8>,
 }
 
@@ -167,26 +168,26 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn tcp(conn: TcpStream, bufsize: usize) -> Result<Client, std::io::Error> {
+    pub fn over_tcp_stream(conn: TcpStream, bufsize: usize) -> Result<Client, std::io::Error> {
         let r = conn.try_clone()?;
         let w = conn;
-        Client::new(r, w, bufsize)
+        Client::over_transport(r, w, bufsize)
     }
 
     #[cfg(unix)]
-    pub fn unix(conn: UnixStream, bufsize: usize) -> Result<Client, std::io::Error> {
+    pub fn over_unix_stream(conn: UnixStream, bufsize: usize) -> Result<Client, std::io::Error> {
         let r = conn.try_clone()?;
         let w = conn;
-        Client::new(r, w, bufsize)
+        Client::over_transport(r, w, bufsize)
     }
 
-    pub fn new<R: transport::Transport + 'static, W: transport::Transport + 'static>(
+    pub fn over_transport<R: ReadTransport + 'static, W: WriteTransport + 'static>(
         r: R,
         w: W,
         bufsize: usize,
     ) -> Result<Client, std::io::Error> {
-        let mut r: Box<dyn transport::Transport> = std::boxed::Box::new(r);
-        let mut w: Box<dyn transport::Transport> = std::boxed::Box::new(w);
+        let mut r: Box<dyn ReadTransport> = std::boxed::Box::new(r);
+        let mut w: Box<dyn WriteTransport> = std::boxed::Box::new(w);
 
         const MIN_MSIZE: u32 = 4096 + fcall::READDIRHDRSZ;
         let mut bufsize = bufsize.max(MIN_MSIZE as usize).min(u32::MAX as usize);
@@ -239,11 +240,7 @@ impl Client {
         })
     }
 
-    fn read_worker(
-        mut r: Box<dyn transport::Transport>,
-        mut rbuf: Vec<u8>,
-        fcalls: InflightFcalls,
-    ) {
+    fn read_worker(mut r: Box<dyn ReadTransport>, mut rbuf: Vec<u8>, fcalls: InflightFcalls) {
         loop {
             match transport::read(&mut r, &mut rbuf) {
                 Ok(response) => {
@@ -259,9 +256,9 @@ impl Client {
         }
     }
 
-    fn fresh_fid(&self) -> Result<Fid, std::io::Error> {
+    fn fresh_fid(&self) -> Result<ClientFid, std::io::Error> {
         match self.state.fids.fresh_id() {
-            Some(id) => Ok(Fid {
+            Some(id) => Ok(ClientFid {
                 client: self.clone(),
                 needs_clunk: false,
                 id,
@@ -288,7 +285,7 @@ impl Client {
         n_uname: u32,
         uname: &str,
         aname: &str,
-    ) -> Result<(fcall::Qid, Fid), std::io::Error> {
+    ) -> Result<(fcall::Qid, ClientFid), std::io::Error> {
         let mut fid = self.fresh_fid()?;
         match self.fcall(Fcall::Tattach(fcall::Tattach {
             afid: fcall::NOFID,
@@ -307,14 +304,14 @@ impl Client {
     }
 }
 
-pub struct Fid {
+pub struct ClientFid {
     client: Client,
     needs_clunk: bool,
     id: u32,
 }
 
-impl Fid {
-    fn walk1(&self, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, Fid), std::io::Error> {
+impl ClientFid {
+    fn walk1(&self, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, ClientFid), std::io::Error> {
         if wnames.len() > fcall::MAXWELEM {
             return Err(err_other("walk has too many wnames"));
         }
@@ -340,7 +337,7 @@ impl Fid {
         }
     }
 
-    pub fn walk(&self, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, Fid), std::io::Error> {
+    pub fn walk(&self, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, ClientFid), std::io::Error> {
         let mut wqids = Vec::with_capacity(fcall::MAXWELEM);
         if wnames.is_empty() {
             return self.walk1(wnames);
@@ -475,7 +472,7 @@ impl Fid {
         }
     }
 
-    pub fn rename(&self, dir_fid: &Fid, name: &str) -> Result<(), std::io::Error> {
+    pub fn rename(&self, dir_fid: &ClientFid, name: &str) -> Result<(), std::io::Error> {
         match self.client.fcall(Fcall::Trename(fcall::Trename {
             fid: self.id,
             dfid: dir_fid.id,
@@ -490,7 +487,7 @@ impl Fid {
     pub fn renameat(
         &self,
         oldname: &str,
-        new_dir_fid: &Fid,
+        new_dir_fid: &ClientFid,
         newname: &str,
     ) -> Result<(), std::io::Error> {
         match self.client.fcall(Fcall::Trenameat(fcall::Trenameat {
@@ -586,7 +583,7 @@ impl Fid {
     }
 }
 
-impl Drop for Fid {
+impl Drop for ClientFid {
     fn drop(&mut self) {
         let _ = self._clunk();
         self.client
