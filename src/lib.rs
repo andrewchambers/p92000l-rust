@@ -1,7 +1,6 @@
 pub mod client;
 pub mod errno;
 pub mod fcall;
-pub mod lstring;
 pub mod server;
 pub mod socket;
 pub mod transport;
