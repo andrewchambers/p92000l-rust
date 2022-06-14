@@ -223,6 +223,45 @@ impl<'a> From<&'a fs::Metadata> for Stat {
 }
 
 #[derive(Clone, Debug)]
+pub enum FcallStr<'a> {
+    Owned(Vec<u8>),
+    Borrowed(&'a [u8]),
+}
+
+impl<'a> FcallStr<'a> {
+    pub fn as_bytes(&'a self) -> &'a [u8] {
+        match self {
+            FcallStr::Owned(b) => b,
+            FcallStr::Borrowed(b) => b,
+        }
+    }
+
+    pub fn clone_static(&self) -> FcallStr<'static> {
+        FcallStr::Owned(self.as_bytes().to_vec())
+    }
+
+    pub fn len(&self) -> usize {
+        self.as_bytes().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.as_bytes().is_empty()
+    }
+}
+
+impl<'a, T: ?Sized + AsRef<[u8]>> From<&'a T> for FcallStr<'a> {
+    fn from(b: &'a T) -> FcallStr<'a> {
+        FcallStr::Borrowed(b.as_ref())
+    }
+}
+
+impl<'a> std::fmt::Display for FcallStr<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", String::from_utf8_lossy(self.as_bytes()))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct DirEntryData<'a> {
     pub data: Vec<DirEntry<'a>>,
 }
@@ -458,7 +497,7 @@ pub struct DirEntry<'a> {
     pub qid: Qid,
     pub offset: u64,
     pub typ: u8,
-    pub name: Cow<'a, str>,
+    pub name: FcallStr<'a>,
 }
 
 impl<'a> DirEntry<'a> {
@@ -474,7 +513,7 @@ pub struct Flock<'a> {
     pub start: u64,
     pub length: u64,
     pub proc_id: u32,
-    pub client_id: Cow<'a, str>,
+    pub client_id: FcallStr<'a>,
 }
 
 #[derive(Clone, Debug)]
@@ -483,7 +522,7 @@ pub struct Getlock<'a> {
     pub start: u64,
     pub length: u64,
     pub proc_id: u32,
-    pub client_id: Cow<'a, str>,
+    pub client_id: FcallStr<'a>,
 }
 
 #[derive(Clone, Debug)]
@@ -549,8 +588,8 @@ impl From<std::io::Error> for Rlerror {
 pub struct Tattach<'a> {
     pub fid: u32,
     pub afid: u32,
-    pub uname: Cow<'a, str>,
-    pub aname: Cow<'a, str>,
+    pub uname: FcallStr<'a>,
+    pub aname: FcallStr<'a>,
     pub n_uname: u32,
 }
 
@@ -559,9 +598,9 @@ impl<'a> Tattach<'a> {
         Tattach {
             afid: self.afid,
             fid: self.fid,
-            n_uname: self.n_uname.to_owned(),
-            aname: Cow::from(self.aname.clone().into_owned()),
-            uname: Cow::from(self.uname.clone().into_owned()),
+            n_uname: self.n_uname,
+            aname: self.aname.clone_static(),
+            uname: self.uname.clone_static(),
         }
     }
 }
@@ -596,7 +635,7 @@ pub struct Rlopen {
 #[derive(Clone, Debug)]
 pub struct Tlcreate<'a> {
     pub fid: u32,
-    pub name: Cow<'a, str>,
+    pub name: FcallStr<'a>,
     pub flags: LOpenFlags,
     pub mode: u32,
     pub gid: u32,
@@ -609,7 +648,7 @@ impl<'a> Tlcreate<'a> {
             flags: self.flags,
             gid: self.gid,
             mode: self.mode,
-            name: Cow::from(self.name.clone().into_owned()),
+            name: self.name.clone_static(),
         }
     }
 }
@@ -623,8 +662,8 @@ pub struct Rlcreate {
 #[derive(Clone, Debug)]
 pub struct Tsymlink<'a> {
     pub fid: u32,
-    pub name: Cow<'a, str>,
-    pub symtgt: Cow<'a, str>,
+    pub name: FcallStr<'a>,
+    pub symtgt: FcallStr<'a>,
     pub gid: u32,
 }
 
@@ -632,8 +671,8 @@ impl<'a> Tsymlink<'a> {
     pub fn clone_static(&'a self) -> Tsymlink<'static> {
         Tsymlink {
             fid: self.fid,
-            name: Cow::from(self.name.clone().into_owned()),
-            symtgt: Cow::from(self.symtgt.clone().into_owned()),
+            name: self.name.clone_static(),
+            symtgt: self.symtgt.clone_static(),
             gid: self.gid,
         }
     }
@@ -647,7 +686,7 @@ pub struct Rsymlink {
 #[derive(Clone, Debug)]
 pub struct Tmknod<'a> {
     pub dfid: u32,
-    pub name: Cow<'a, str>,
+    pub name: FcallStr<'a>,
     pub mode: u32,
     pub major: u32,
     pub minor: u32,
@@ -662,7 +701,7 @@ impl<'a> Tmknod<'a> {
             major: self.major,
             minor: self.minor,
             mode: self.mode,
-            name: Cow::from(self.name.clone().into_owned()),
+            name: self.name.clone_static(),
         }
     }
 }
@@ -676,7 +715,7 @@ pub struct Rmknod {
 pub struct Trename<'a> {
     pub fid: u32,
     pub dfid: u32,
-    pub name: Cow<'a, str>,
+    pub name: FcallStr<'a>,
 }
 
 impl<'a> Trename<'a> {
@@ -684,7 +723,7 @@ impl<'a> Trename<'a> {
         Trename {
             fid: self.fid,
             dfid: self.dfid,
-            name: Cow::from(self.name.clone().into_owned()),
+            name: self.name.clone_static(),
         }
     }
 }
@@ -699,13 +738,13 @@ pub struct Treadlink {
 
 #[derive(Clone, Debug)]
 pub struct Rreadlink<'a> {
-    pub target: Cow<'a, str>,
+    pub target: FcallStr<'a>,
 }
 
 impl<'a> Rreadlink<'a> {
     pub fn clone_static(&'a self) -> Rreadlink<'static> {
         Rreadlink {
-            target: Cow::from(self.target.clone().into_owned()),
+            target: self.target.clone_static(),
         }
     }
 }
@@ -737,7 +776,7 @@ pub struct Rsetattr {}
 pub struct Txattrwalk<'a> {
     pub fid: u32,
     pub new_fid: u32,
-    pub name: Cow<'a, str>,
+    pub name: FcallStr<'a>,
 }
 
 impl<'a> Txattrwalk<'a> {
@@ -745,7 +784,7 @@ impl<'a> Txattrwalk<'a> {
         Txattrwalk {
             fid: self.fid,
             new_fid: self.new_fid,
-            name: Cow::from(self.name.clone().into_owned()),
+            name: self.name.clone_static(),
         }
     }
 }
@@ -758,7 +797,7 @@ pub struct Rxattrwalk {
 #[derive(Clone, Debug)]
 pub struct Txattrcreate<'a> {
     pub fid: u32,
-    pub name: Cow<'a, str>,
+    pub name: FcallStr<'a>,
     pub attr_size: u64,
     pub flags: u32,
 }
@@ -767,7 +806,7 @@ impl<'a> Txattrcreate<'a> {
     pub fn clone_static(&'a self) -> Txattrcreate<'static> {
         Txattrcreate {
             fid: self.fid,
-            name: Cow::from(self.name.clone().into_owned()),
+            name: self.name.clone_static(),
             attr_size: self.attr_size,
             flags: self.flags,
         }
@@ -801,7 +840,7 @@ impl<'a> Rreaddir<'a> {
                         qid: de.qid,
                         offset: de.offset,
                         typ: de.typ,
-                        name: Cow::from(de.name.clone().into_owned()),
+                        name: de.name.clone_static(),
                     })
                     .collect(),
             },
@@ -833,7 +872,7 @@ impl<'a> Tlock<'a> {
                 start: self.flock.start,
                 length: self.flock.length,
                 proc_id: self.flock.proc_id,
-                client_id: Cow::from(self.flock.client_id.clone().into_owned()),
+                client_id: self.flock.client_id.clone_static(),
             },
         }
     }
@@ -859,7 +898,7 @@ impl<'a> Tgetlock<'a> {
                 start: self.flock.start,
                 length: self.flock.length,
                 proc_id: self.flock.proc_id,
-                client_id: Cow::from(self.flock.client_id.clone().into_owned()),
+                client_id: self.flock.client_id.clone_static(),
             },
         }
     }
@@ -878,7 +917,7 @@ impl<'a> Rgetlock<'a> {
                 start: self.flock.start,
                 length: self.flock.length,
                 proc_id: self.flock.proc_id,
-                client_id: Cow::from(self.flock.client_id.clone().into_owned()),
+                client_id: self.flock.client_id.clone_static(),
             },
         }
     }
@@ -888,7 +927,7 @@ impl<'a> Rgetlock<'a> {
 pub struct Tlink<'a> {
     pub dfid: u32,
     pub fid: u32,
-    pub name: Cow<'a, str>,
+    pub name: FcallStr<'a>,
 }
 
 impl<'a> Tlink<'a> {
@@ -896,7 +935,7 @@ impl<'a> Tlink<'a> {
         Tlink {
             fid: self.fid,
             dfid: self.dfid,
-            name: Cow::from(self.name.clone().into_owned()),
+            name: self.name.clone_static(),
         }
     }
 }
@@ -907,7 +946,7 @@ pub struct Rlink {}
 #[derive(Clone, Debug)]
 pub struct Tmkdir<'a> {
     pub dfid: u32,
-    pub name: Cow<'a, str>,
+    pub name: FcallStr<'a>,
     pub mode: u32,
     pub gid: u32,
 }
@@ -918,7 +957,7 @@ impl<'a> Tmkdir<'a> {
             dfid: self.dfid,
             gid: self.gid,
             mode: self.mode,
-            name: Cow::from(self.name.clone().into_owned()),
+            name: self.name.clone_static(),
         }
     }
 }
@@ -931,9 +970,9 @@ pub struct Rmkdir {
 #[derive(Clone, Debug)]
 pub struct Trenameat<'a> {
     pub olddfid: u32,
-    pub oldname: Cow<'a, str>,
+    pub oldname: FcallStr<'a>,
     pub newdfid: u32,
-    pub newname: Cow<'a, str>,
+    pub newname: FcallStr<'a>,
 }
 
 impl<'a> Trenameat<'a> {
@@ -941,8 +980,8 @@ impl<'a> Trenameat<'a> {
         Trenameat {
             newdfid: self.newdfid,
             olddfid: self.olddfid,
-            newname: Cow::from(self.newname.clone().into_owned()),
-            oldname: Cow::from(self.oldname.clone().into_owned()),
+            newname: self.newname.clone_static(),
+            oldname: self.oldname.clone_static(),
         }
     }
 }
@@ -953,7 +992,7 @@ pub struct Rrenameat {}
 #[derive(Clone, Debug)]
 pub struct Tunlinkat<'a> {
     pub dfid: u32,
-    pub name: Cow<'a, str>,
+    pub name: FcallStr<'a>,
     pub flags: u32,
 }
 
@@ -962,7 +1001,7 @@ impl<'a> Tunlinkat<'a> {
         Tunlinkat {
             dfid: self.dfid,
             flags: self.flags,
-            name: Cow::from(self.name.clone().into_owned()),
+            name: self.name.clone_static(),
         }
     }
 }
@@ -973,8 +1012,8 @@ pub struct Runlinkat {}
 #[derive(Clone, Debug)]
 pub struct Tauth<'a> {
     pub afid: u32,
-    pub uname: Cow<'a, str>,
-    pub aname: Cow<'a, str>,
+    pub uname: FcallStr<'a>,
+    pub aname: FcallStr<'a>,
     pub n_uname: u32,
 }
 
@@ -983,8 +1022,8 @@ impl<'a> Tauth<'a> {
         Tauth {
             afid: self.afid,
             n_uname: self.n_uname,
-            aname: Cow::from(self.aname.clone().into_owned()),
-            uname: Cow::from(self.uname.clone().into_owned()),
+            aname: self.aname.clone_static(),
+            uname: self.uname.clone_static(),
         }
     }
 }
@@ -997,14 +1036,14 @@ pub struct Rauth {
 #[derive(Clone, Debug)]
 pub struct Tversion<'a> {
     pub msize: u32,
-    pub version: Cow<'a, str>,
+    pub version: FcallStr<'a>,
 }
 
 impl<'a> Tversion<'a> {
     pub fn clone_static(&'a self) -> Tversion<'static> {
         Tversion {
             msize: self.msize,
-            version: Cow::from(self.version.clone().into_owned()),
+            version: self.version.clone_static(),
         }
     }
 }
@@ -1012,14 +1051,14 @@ impl<'a> Tversion<'a> {
 #[derive(Clone, Debug)]
 pub struct Rversion<'a> {
     pub msize: u32,
-    pub version: Cow<'a, str>,
+    pub version: FcallStr<'a>,
 }
 
 impl<'a> Rversion<'a> {
     pub fn clone_static(&'a self) -> Rversion<'static> {
         Rversion {
             msize: self.msize,
-            version: Cow::from(self.version.clone().into_owned()),
+            version: self.version.clone_static(),
         }
     }
 }
@@ -1036,7 +1075,7 @@ pub struct Rflush {}
 pub struct Twalk<'a> {
     pub fid: u32,
     pub new_fid: u32,
-    pub wnames: Vec<Cow<'a, str>>,
+    pub wnames: Vec<FcallStr<'a>>,
 }
 
 impl<'a> Twalk<'a> {
@@ -1044,11 +1083,7 @@ impl<'a> Twalk<'a> {
         Twalk {
             fid: self.fid,
             new_fid: self.new_fid,
-            wnames: self
-                .wnames
-                .iter()
-                .map(|n| Cow::from(n.clone().into_owned()))
-                .collect(),
+            wnames: self.wnames.iter().map(|n| n.clone_static()).collect(),
         }
     }
 }
@@ -1057,6 +1092,7 @@ impl<'a> Twalk<'a> {
 pub struct Rwalk {
     pub wqids: Vec<Qid>,
 }
+
 #[derive(Clone, Debug)]
 pub struct Tread {
     pub fid: u32,
@@ -1711,7 +1747,7 @@ fn encode_u64<W: Write>(w: &mut W, v: u64) -> std::io::Result<()> {
     Ok(())
 }
 
-fn encode_str<W: Write>(w: &mut W, v: &str) -> std::io::Result<()> {
+fn encode_str<W: Write>(w: &mut W, v: &FcallStr<'_>) -> std::io::Result<()> {
     if v.len() > 0xffff {
         return Err(std::io::Error::new(
             ::std::io::ErrorKind::InvalidInput,
@@ -1735,7 +1771,7 @@ fn encode_data_buf<W: Write>(w: &mut W, v: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
-fn encode_vec_str<'a, W: Write>(w: &mut W, v: &[Cow<'a, str>]) -> std::io::Result<()> {
+fn encode_vec_str<'a, W: Write>(w: &mut W, v: &[FcallStr<'a>]) -> std::io::Result<()> {
     if v.len() > 0xffff {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -2151,7 +2187,7 @@ fn encode_rflush<W: Write>(_w: &mut W, _v: &Rflush) -> std::io::Result<()> {
     Ok(())
 }
 
-fn encode_twalk<'a, W: Write>(w: &'a mut W, v: &Twalk<'a>) -> std::io::Result<()> {
+fn encode_twalk<'a, W: Write>(w: &mut W, v: &Twalk<'a>) -> std::io::Result<()> {
     encode_u32(w, v.fid)?;
     encode_u32(w, v.new_fid)?;
     encode_vec_str(w, &v.wnames)?;
@@ -2253,16 +2289,10 @@ impl<'a, 'b: 'a> FcallDecoder<'b> {
         }
     }
 
-    fn decode_str(&mut self) -> std::io::Result<Cow<'b, str>> {
+    fn decode_str(&mut self) -> std::io::Result<FcallStr<'b>> {
         let n = self.decode_u16()? as usize;
         if self.buf.len() >= n {
-            match std::str::from_utf8(&self.buf[..n]) {
-                Ok(s) => {
-                    self.buf = &self.buf[n..];
-                    Ok(Cow::from(s))
-                }
-                Err(_) => Err(invalid_9p_msg()),
-            }
+            Ok(FcallStr::Borrowed(&self.buf[..n]))
         } else {
             Err(invalid_9p_msg())
         }
@@ -2277,15 +2307,6 @@ impl<'a, 'b: 'a> FcallDecoder<'b> {
         } else {
             Err(invalid_9p_msg())
         }
-    }
-
-    fn decode_vec_str(&mut self) -> std::io::Result<Vec<Cow<'b, str>>> {
-        let len = self.decode_u16()?;
-        let mut v = Vec::new();
-        for _ in 0..len {
-            v.push(self.decode_str()?);
-        }
-        Ok(v)
     }
 
     fn decode_vec_qid(&mut self) -> std::io::Result<Vec<Qid>> {
@@ -2738,7 +2759,14 @@ impl<'a, 'b: 'a> FcallDecoder<'b> {
         Ok(Twalk {
             fid: self.decode_u32()?,
             new_fid: self.decode_u32()?,
-            wnames: self.decode_vec_str()?,
+            wnames: {
+                let len = self.decode_u16()?;
+                let mut wnames = Vec::new();
+                for _ in 0..len {
+                    wnames.push(self.decode_str()?);
+                }
+                wnames
+            },
         })
     }
 

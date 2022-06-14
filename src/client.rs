@@ -1,5 +1,5 @@
 use super::fcall;
-use super::fcall::{Fcall, TaggedFcall};
+use super::fcall::{Fcall, FcallStr, TaggedFcall};
 use super::transport;
 use super::transport::{ReadTransport, WriteTransport};
 use crossbeam_channel as channel;
@@ -201,7 +201,7 @@ impl Client {
                 tag: fcall::NOTAG,
                 fcall: Fcall::Tversion(fcall::Tversion {
                     msize: bufsize.min(u32::MAX as usize) as u32,
-                    version: Cow::from("9P2000.L"),
+                    version: "9P2000.L".into(),
                 }),
             },
         )?;
@@ -211,7 +211,7 @@ impl Client {
                 tag: fcall::NOTAG,
                 fcall: Fcall::Rversion(fcall::Rversion { msize, version }),
             } => {
-                if version != "9P2000.L" {
+                if version.as_bytes() != "9P2000.L".as_bytes() {
                     return Err(err_other("protocol negotiation failed"));
                 }
                 bufsize = bufsize.min(msize as usize);
@@ -280,19 +280,19 @@ impl Client {
         rx.recv().or_else(err_io_result)
     }
 
-    pub fn attach(
+    fn _attach(
         &self,
         n_uname: u32,
-        uname: &str,
-        aname: &str,
+        uname: FcallStr,
+        aname: FcallStr,
     ) -> Result<(fcall::Qid, ClientFid), std::io::Error> {
         let mut fid = self.fresh_fid()?;
         match self.fcall(Fcall::Tattach(fcall::Tattach {
             afid: fcall::NOFID,
             fid: fid.id,
             n_uname,
-            uname: Cow::from(uname),
-            aname: Cow::from(aname),
+            uname,
+            aname,
         }))? {
             Fcall::Rattach(fcall::Rattach { qid }) => {
                 fid.needs_clunk = true;
@@ -301,6 +301,15 @@ impl Client {
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }
+    }
+
+    pub fn attach<'a, 'b, S1: 'a + Into<FcallStr<'a>>, S2: 'b + Into<FcallStr<'b>>>(
+        &self,
+        n_uname: u32,
+        uname: S1,
+        aname: S2,
+    ) -> Result<(fcall::Qid, ClientFid), std::io::Error> {
+        self._attach(n_uname, uname.into(), aname.into())
     }
 }
 
@@ -311,22 +320,15 @@ pub struct ClientFid {
 }
 
 impl ClientFid {
-    fn walk1(&self, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, ClientFid), std::io::Error> {
+    fn _walk1(&self, wnames: &[FcallStr]) -> Result<(Vec<fcall::Qid>, ClientFid), std::io::Error> {
         if wnames.len() > fcall::MAXWELEM {
             return Err(err_other("walk has too many wnames"));
         }
-
-        let wnames = wnames
-            .iter()
-            .map(|name| Cow::from(name.to_string()))
-            .collect();
-
         let mut new_fid = self.client.fresh_fid()?;
-
         match self.client.fcall(Fcall::Twalk(fcall::Twalk {
             fid: self.id,
             new_fid: new_fid.id,
-            wnames,
+            wnames: wnames.to_vec(),
         }))? {
             Fcall::Rwalk(fcall::Rwalk { wqids }) => {
                 new_fid.needs_clunk = true;
@@ -337,19 +339,28 @@ impl ClientFid {
         }
     }
 
-    pub fn walk(&self, wnames: &[&str]) -> Result<(Vec<fcall::Qid>, ClientFid), std::io::Error> {
-        let mut wqids = Vec::with_capacity(fcall::MAXWELEM);
+    fn _walk(&self, wnames: &[FcallStr]) -> Result<(Vec<fcall::Qid>, ClientFid), std::io::Error> {
         if wnames.is_empty() {
-            return self.walk1(wnames);
+            return self._walk1(wnames);
         }
+        let mut wqids = Vec::with_capacity(fcall::MAXWELEM);
         let mut f = None;
         for wnames in wnames.chunks(fcall::MAXWELEM) {
             let fref = f.as_ref().unwrap_or(self);
-            let (mut new_wqids, new_f) = fref.walk1(wnames)?;
+            let (mut new_wqids, new_f) = fref._walk1(wnames)?;
             wqids.append(&mut new_wqids);
             f = Some(new_f);
         }
         Ok((wqids, f.unwrap()))
+    }
+
+    pub fn walk<'a, S: 'a + Clone + Into<FcallStr<'a>>>(
+        &self,
+        wnames: &[S],
+    ) -> Result<(Vec<fcall::Qid>, ClientFid), std::io::Error> {
+        let mut v = Vec::with_capacity(wnames.len());
+        v.extend(wnames.iter().map(|s| s.clone().into()));
+        self._walk(&v)
     }
 
     pub fn open(&self, flags: fcall::LOpenFlags) -> Result<fcall::Qid, std::io::Error> {
@@ -363,9 +374,9 @@ impl ClientFid {
         }
     }
 
-    pub fn create(
+    fn _create(
         &self,
-        name: &str,
+        name: FcallStr,
         flags: fcall::LOpenFlags,
         mode: u32,
         gid: u32,
@@ -375,12 +386,22 @@ impl ClientFid {
             flags,
             mode,
             gid,
-            name: Cow::from(name),
+            name: name,
         }))? {
             Fcall::Rlcreate(fcall::Rlcreate { qid, .. }) => Ok(qid),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }
+    }
+
+    pub fn create<'a, S: 'a + Into<FcallStr<'a>>>(
+        &self,
+        name: S,
+        flags: fcall::LOpenFlags,
+        mode: u32,
+        gid: u32,
+    ) -> Result<fcall::Qid, std::io::Error> {
+        self._create(name.into(), flags, mode, gid)
     }
 
     pub fn read_dir1(&self, offset: u64) -> Result<Vec<fcall::DirEntry<'static>>, std::io::Error> {
@@ -446,10 +467,10 @@ impl ClientFid {
         }
     }
 
-    pub fn mkdir(&self, name: &str, mode: u32, gid: u32) -> Result<fcall::Qid, std::io::Error> {
+    fn _mkdir(&self, name: FcallStr, mode: u32, gid: u32) -> Result<fcall::Qid, std::io::Error> {
         match self.client.fcall(Fcall::Tmkdir(fcall::Tmkdir {
             dfid: self.id,
-            name: Cow::from(name),
+            name: name,
             mode,
             gid,
         }))? {
@@ -459,11 +480,20 @@ impl ClientFid {
         }
     }
 
-    // XXX make flags atg a bitflag set?
-    pub fn unlinkat(&self, name: &str, flags: u32) -> Result<(), std::io::Error> {
+    pub fn mkdir<'a, S: 'a + Into<FcallStr<'a>>>(
+        &self,
+        name: S,
+        mode: u32,
+        gid: u32,
+    ) -> Result<fcall::Qid, std::io::Error> {
+        self._mkdir(name.into(), mode, gid)
+    }
+
+    // XXX make flags into a bitflag set?
+    fn _unlinkat(&self, name: FcallStr, flags: u32) -> Result<(), std::io::Error> {
         match self.client.fcall(Fcall::Tunlinkat(fcall::Tunlinkat {
             dfid: self.id,
-            name: Cow::from(name),
+            name: name,
             flags,
         }))? {
             Fcall::Runlinkat(fcall::Runlinkat { .. }) => Ok(()),
@@ -472,11 +502,19 @@ impl ClientFid {
         }
     }
 
-    pub fn rename(&self, dir_fid: &ClientFid, name: &str) -> Result<(), std::io::Error> {
+    pub fn unlinkat<'a, S: 'a + Into<FcallStr<'a>>>(
+        &self,
+        name: S,
+        flags: u32,
+    ) -> Result<(), std::io::Error> {
+        self._unlinkat(name.into(), flags)
+    }
+
+    fn _rename(&self, dir_fid: &ClientFid, name: FcallStr) -> Result<(), std::io::Error> {
         match self.client.fcall(Fcall::Trename(fcall::Trename {
             fid: self.id,
             dfid: dir_fid.id,
-            name: Cow::from(name),
+            name: name,
         }))? {
             Fcall::Rrename(fcall::Rrename { .. }) => Ok(()),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
@@ -484,22 +522,39 @@ impl ClientFid {
         }
     }
 
-    pub fn renameat(
+    pub fn rename<'a, S: 'a + Into<FcallStr<'a>>>(
         &self,
-        oldname: &str,
+        dir_fid: &ClientFid,
+        name: S,
+    ) -> Result<(), std::io::Error> {
+        self._rename(dir_fid, name.into())
+    }
+
+    fn _renameat(
+        &self,
+        old_name: FcallStr,
         new_dir_fid: &ClientFid,
-        newname: &str,
+        new_name: FcallStr,
     ) -> Result<(), std::io::Error> {
         match self.client.fcall(Fcall::Trenameat(fcall::Trenameat {
             olddfid: self.id,
             newdfid: new_dir_fid.id,
-            oldname: Cow::from(oldname),
-            newname: Cow::from(newname),
+            oldname: old_name,
+            newname: new_name,
         }))? {
             Fcall::Rrenameat(fcall::Rrenameat { .. }) => Ok(()),
             Fcall::Rlerror(err) => Err(err.into_io_error()),
             _ => Err(err_unexpected_response()),
         }
+    }
+
+    pub fn renameat<'a, 'b, S1: 'a + Into<FcallStr<'a>>, S2: 'b + Into<FcallStr<'b>>>(
+        &self,
+        old_name: S1,
+        new_dir_fid: &ClientFid,
+        new_name: S2,
+    ) -> Result<(), std::io::Error> {
+        self._renameat(old_name.into(), new_dir_fid, new_name.into())
     }
 
     pub fn getattr(&self, mask: fcall::GetattrMask) -> Result<fcall::Rgetattr, std::io::Error> {

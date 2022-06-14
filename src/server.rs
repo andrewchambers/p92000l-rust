@@ -2,7 +2,6 @@ use super::errno;
 use super::fcall;
 use super::fcall::*;
 use super::transport;
-use std::borrow::Cow;
 use std::boxed::Box;
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
@@ -609,14 +608,14 @@ where
         }) => {
             let msize = (*msize).min(bufsize as u32);
 
-            let rversion = if version == "9P2000.L" {
+            let rversion = if version.as_bytes() == "9P2000.L".as_bytes() {
                 Rversion {
                     version: version.clone(),
                     msize,
                 }
             } else {
                 Rversion {
-                    version: Cow::from("unknown"),
+                    version: "unknown".into(),
                     msize,
                 }
             };

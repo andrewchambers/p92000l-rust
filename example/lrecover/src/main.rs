@@ -3,7 +3,6 @@ use p92000l;
 use p92000l::{
     Fcall, FcallType, ReadTransport, Socket, SocketAddr, SocketListener, WriteTransport,
 };
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
 use std::ops::Add;
@@ -178,7 +177,7 @@ fn initial_connect(
         }
     };
 
-    if tversion.version != "9P2000.L" {
+    if tversion.version.as_bytes() != "9P2000.L".as_bytes() {
         p92000l::write(
             &mut client_conn,
             &mut fcall_buf,
@@ -186,7 +185,7 @@ fn initial_connect(
                 tag: p92000l::NOTAG,
                 fcall: Fcall::Rversion(p92000l::Rversion {
                     msize: tversion.msize,
-                    version: Cow::from("unknown"),
+                    version: "unknown".into(),
                 }),
             },
         )?;
@@ -464,7 +463,9 @@ fn reconnect(state: &mut ProxyState) -> Result<(), std::io::Error> {
             }
         };
 
-        if rversion.msize < state.rversion.msize || rversion.version != state.rversion.version {
+        if rversion.msize < state.rversion.msize
+            || rversion.version.as_bytes() != state.rversion.version.as_bytes()
+        {
             // The server has changed it's parameters, we must abort.
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
