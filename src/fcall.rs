@@ -2292,7 +2292,9 @@ impl<'a, 'b: 'a> FcallDecoder<'b> {
     fn decode_str(&mut self) -> std::io::Result<FcallStr<'b>> {
         let n = self.decode_u16()? as usize;
         if self.buf.len() >= n {
-            Ok(FcallStr::Borrowed(&self.buf[..n]))
+            let v = FcallStr::Borrowed(&self.buf[..n]);
+            self.buf = &self.buf[n..];
+            Ok(v)
         } else {
             Err(invalid_9p_msg())
         }
