@@ -186,9 +186,17 @@ impl Client {
         w: W,
         bufsize: usize,
     ) -> Result<Client, std::io::Error> {
-        let mut r: Box<dyn ReadTransport> = std::boxed::Box::new(r);
-        let mut w: Box<dyn WriteTransport> = std::boxed::Box::new(w);
+        let r: Box<dyn ReadTransport> = std::boxed::Box::new(r);
+        let w: Box<dyn WriteTransport> = std::boxed::Box::new(w);
 
+        Client::_over_transport(r, w, bufsize)
+    }
+
+    fn _over_transport(
+        mut r: Box<dyn ReadTransport>,
+        mut w: Box<dyn WriteTransport>,
+        bufsize: usize,
+    ) -> Result<Client, std::io::Error> {
         const MIN_MSIZE: u32 = 4096 + fcall::READDIRHDRSZ;
         let mut bufsize = bufsize.max(MIN_MSIZE as usize).min(u32::MAX as usize);
         let mut wbuf = Vec::with_capacity(bufsize);
