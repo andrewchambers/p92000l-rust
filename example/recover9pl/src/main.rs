@@ -191,8 +191,8 @@ fn initial_connect(
             },
         )?;
         error!(
-            "rejecting connection due to version mismatch, got version {} from {}",
-            tversion.version, &server_addr
+            "rejecting connection due to version mismatch, got version {} from client",
+            tversion.version
         );
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,

@@ -1,11 +1,11 @@
 [package]
-name = "lrecover"
+name = "recover9pl"
 version = "0.0.1"
 authors = [ "andrewchambers <ac@acha.ninja>" ]
 edition = "2021"
 
 [[bin]]
-name = "lrecover"
+name = "recover9pl"
 
 [dependencies]
 
