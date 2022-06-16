@@ -18,7 +18,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-use super::transport::{ReadTransport, WriteTransport};
+use p92000l::{ReadTransport, WriteTransport};
 use std::fmt;
 use std::io;
 use std::net;
@@ -121,14 +121,6 @@ impl SocketAddr {
                 }
                 Err(err) => Err(ResolveAddressError::IoError(err)),
             }
-        }
-    }
-
-    pub fn is_unix(&self) -> bool {
-        match self {
-            #[cfg(unix)]
-            SocketAddr::Unix(_) => true,
-            _ => false,
         }
     }
 }

@@ -1,8 +1,9 @@
+pub mod socket;
+
 use log::{debug, error, info};
 use p92000l;
-use p92000l::{
-    Fcall, FcallType, ReadTransport, Socket, SocketAddr, SocketListener, WriteTransport,
-};
+use p92000l::{Fcall, FcallType, ReadTransport, WriteTransport};
+use socket::{Socket, SocketAddr, SocketListener};
 use std::collections::HashMap;
 use std::io::Write;
 use std::ops::Add;
