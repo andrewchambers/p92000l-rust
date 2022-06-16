@@ -1,7 +1,7 @@
 # recover9pl
 
 A proxy server for 9p2000.l that tracks attached fids
-and is able to re-establish the attach points on network
+and is able to re-establish the attach points after network
 failure. This proxy means you don't need to re-mount your filesystem on disconnect.
 
 Any requests that happen during a disconnected period will
@@ -15,7 +15,7 @@ return an error for all requests until they are closed.
 You must pay special attention to state (especially file locks) programs
 acquire while doing multiple walks of the attach fid.
 A disconnect will release locks and other state acquired since the first walk
-and your program may not detect this until it is too late.
+and the program may not detect this until it is too late.
 
 The best solution is to write your application such that
 it uses 'openat' from a file descriptor that was retrieved from an initial Twalk
